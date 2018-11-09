@@ -1,4 +1,4 @@
-from cpy.formatting import clang_fmt
+from text import clang_fmt
 
 
 class CodeBlock(object):

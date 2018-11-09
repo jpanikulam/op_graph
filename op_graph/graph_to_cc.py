@@ -125,8 +125,10 @@ def rk4_integrate(gr):
     print '\nqdot:'
     print qdot
 
-    k1 = deepcopy(qdot_gr)
-    k2 = deepcopy(qdot_gr)
+    qdot_group = gr.groupify('qdot')
+
+    # k1 = deepcopy(qdot_gr)
+    # k2 = deepcopy(qdot_gr)
     h = k2.scalar('h2')
 
     repls = {}

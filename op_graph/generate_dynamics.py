@@ -1,8 +1,9 @@
-from cpy.formatting import clang_fmt
+from text import clang_fmt
 
 import create
 import generate
-from graph_to_cc import to_cpp_type, to_const_ref, get_states
+from graph import get_states
+from graph_to_cc import to_cpp_type, to_const_ref
 
 
 def get_controls(gr):
