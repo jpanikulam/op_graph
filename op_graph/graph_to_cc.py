@@ -125,7 +125,13 @@ def rk4_integrate(gr):
     print '\nqdot:'
     print qdot
 
-    qdot_group = gr.groupify('qdot')
+    qdot_group = gr.groupify('Qdot', qdot)
+    states = gr.groupify('Q', tuple(states))
+
+    print states
+    print qdot_group
+
+    print gr
 
     # k1 = deepcopy(qdot_gr)
     # k2 = deepcopy(qdot_gr)

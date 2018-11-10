@@ -77,53 +77,6 @@ def create_SO3():
 def create_SE3():
     return create_liegroup('SE3')
 
-
-def binary_op(f):
-    def binary(self, out, in_1, in_2, **kwargs):
-        """Create a binary operation
-
-        One day, to cleanly handle groups we might want to support
-          subgraphs or blocks or something.
-        """
-        g1 = self._type(in_1) == 'group'
-        g2 = self._type(in_1) == 'group'
-
-        assert g1 == g2
-
-        if g1 and g2:
-            appends = out
-            g1_members = get_args(self._adj[in_1])
-            g2_members = get_args(self._adj[in_2])
-            new_syms = []
-            for m1, m2 in zip(g1_members, g2_members):
-                new_sym = "{}_{}_{}".format(appends, m1, m2)
-                f(self, new_sym, m1, m2, **kwargs)
-                new_syms.append(new_sym)
-            self.groupify(out, new_syms)
-        else:
-            return f(self, out, in_1, in_2, **kwargs)
-
-        return out
-    return binary
-
-
-def unary_op(f):
-    def unary(self, out, in_group, **kwargs):
-        list_1 = isinstance(in_group, (list, tuple))
-        if list_1:
-            new_group = []
-            appends = out
-            for a in in_group:
-                new_sym = "{}_{}".format(appends, a)
-                f(self, new_sym, a, **kwargs)
-                new_group.append(new_sym)
-            self.groupify(out, new_group)
-        else:
-            f(self, out, in_group, **kwargs)
-        return out
-    return unary
-
-
 def get_states(gr):
     states = []
     for name, definition in gr.adj.items():
@@ -182,11 +135,6 @@ class OpGraph(object):
     def to_optimize(self):
         return self._to_optimize
 
-    # def create_group(self, name, members=tuple()):
-        # self._groups[name] = tuple(members)
-
-    # def binary_group_op(self, op_name, out_group, *groups, **kwargs):
-
     def unique(self):
         import uuid
         new_thing = uuid.uuid4().hex[-6:]
@@ -209,6 +157,9 @@ class OpGraph(object):
         assert name in self._adj.keys(), "Symbol '{}' does not exist".format(name)
 
     def _needs_not(self, name):
+        '''Verify that name is currently not assigned.'''
+        if name in self._adj.keys():
+            assert self._adj[name] is None
         assert name not in self._adj.keys(), "Symbol '{}' already exists".format(name)
 
     def _inherit(self, from_b):
@@ -302,7 +253,6 @@ class OpGraph(object):
         def replace(in_tuple, formerly, becomes):
             assert in_tuple.count(formerly) > 0
             # Cheating -- easy to improve
-            # assert in_tuple.count(formerly) == 1
             l_tuple = list(in_tuple)
             while(l_tuple.count(formerly) > 0):
                 ind = l_tuple.index(formerly)
@@ -432,8 +382,7 @@ class OpGraph(object):
         return sym_new
 
     def groupify(self, group_sym, syms=[]):
-        """Creates a group.
-        """
+        """Creates a group."""
         assert len(syms) > 1, "Not enough symbols!"
 
         properties = map(self._properties.get, syms)
@@ -442,13 +391,15 @@ class OpGraph(object):
         self._properties[group_sym] = group_properties
         return group_sym
 
-    # @unary_op
-    # def inv(self, sym_new, sym):
-    #     self._needs(sym)
-    #     self._needs_not(sym_new)
-    #     self._adj[sym_new] = self._op('inv', sym)
-    #     self._properties[sym_new] = self._inherit(sym)
-    #     return sym_new
+    """
+    @unary_op
+    def inv(self, sym_new, sym):
+        self._needs(sym)
+        self._needs_not(sym_new)
+        self._adj[sym_new] = self._op('inv', sym)
+        self._properties[sym_new] = self._inherit(sym)
+        return sym_new
+    """
 
     def _anony_call(self, op_name, *args):
         return self._call(op_name, 'anon_' + self.unique(), *args)
@@ -461,26 +412,7 @@ class OpGraph(object):
             - What does SO3(R) + x[3] look like, as groups?
             - How do you traverse a graph with a group?
                 - Should it be handled for you??
-                - Evaluated lazily?
-
         '''
-        """
-        for arg in args:
-            assert self._type(arg) == 'group'
-
-        op_def = self._ops[op_name]
-        # Does there exist a function for each of these?
-        group_args_types = map(lambda o: self._types(get_args(self._adj[o])), args)
-        for elements in zip(*group_args_types):
-            assert elements in op_def.keys(), "Unknown function for arguments {}".format(elements)
-
-        group_args = map(lambda o: get_args(self._adj[o]), args)
-        created = []
-        for arg_tp in zip(*group_args):
-            created.append(self._anony_call(op_name, *arg_tp))
-        return self.groupify(new, created)
-        """
-
         for arg in args:
             assert self._type(arg) == 'group'
 
@@ -554,22 +486,23 @@ class OpGraph(object):
                 'needs': [self._needs_same]
             },
         }
+    '''
+    @binary_op
+    def add(self, sym_new, sym_a, sym_b):
+        """Generate a node which is the sum of a and b."""
+        self._needs(sym_a)
+        self._needs(sym_b)
 
-    # @binary_op
-    # def add(self, sym_new, sym_a, sym_b):
-    #     """Generate a node which is the sum of a and b."""
-    #     self._needs(sym_a)
-    #     self._needs(sym_b)
+        if self._type(sym_a) == 'liegroup':
+            exp_b = self.exp('exp_{}'.format(sym_b), sym_b)
+            return self.mul("{}{}".format(exp_b, sym_a), exp_b, sym_b)
 
-    #     if self._type(sym_a) == 'liegroup':
-    #         exp_b = self.exp('exp_{}'.format(sym_b), sym_b)
-    #         return self.mul("{}{}".format(exp_b, sym_a), exp_b, sym_b)
-
-    #     self._needs_same(sym_a, sym_b)
-    #     self._needs_not(sym_new)
-    #     self._adj[sym_new] = self._op('add', sym_a, sym_b)
-    #     self._properties[sym_new] = self._inherit(sym_a)
-    #     return sym_new
+        self._needs_same(sym_a, sym_b)
+        self._needs_not(sym_new)
+        self._adj[sym_new] = self._op('add', sym_a, sym_b)
+        self._properties[sym_new] = self._inherit(sym_a)
+        return sym_new
+    '''
 
     """
     def _liegroup_mul(self, sym_new, g, vec):
@@ -605,25 +538,26 @@ class OpGraph(object):
                 'needs': [self._needs_same]
             },
         }
+    '''
+    @binary_op
+    def mul(self, sym_new, a, b):
+        "Generate a node which is the product of a and b."""
+        self._needs(a)
+        self._needs(b)
+        self._needs_not(sym_new)
 
-    # @binary_op
-    # def mul(self, sym_new, a, b):
-    #     "Generate a node which is the product of a and b."""
-    #     self._needs(a)
-    #     self._needs(b)
-    #     self._needs_not(sym_new)
+        dispatch_table = {
+            'liegroup': self._liegroup_mul,
+            'scalar': self._scalar_mul,
+        }
 
-    #     dispatch_table = {
-    #         'liegroup': self._liegroup_mul,
-    #         'scalar': self._scalar_mul,
-    #     }
+        a_type = self._type(a)
+        properties = dispatch_table[a_type](sym_new, a, b)
 
-    #     a_type = self._type(a)
-    #     properties = dispatch_table[a_type](sym_new, a, b)
-
-    #     self._adj[sym_new] = self._op('mul', a, b)
-    #     self._properties[sym_new] = properties
-    #     return sym_new
+        self._adj[sym_new] = self._op('mul', a, b)
+        self._properties[sym_new] = properties
+        return sym_new
+    '''
 
     def _exp(self):
         return {
@@ -652,7 +586,7 @@ class OpGraph(object):
         return sym_new
     '''
 
-    @unary_op
+    # @unary_op
     def log(self, sym_new, a, kind=None):
         self._needs(a)
         self._needs_valid_liegroup(a)
@@ -661,7 +595,6 @@ class OpGraph(object):
         self._properties[sym_new] = create_vector(a_prop['algebra_dim'])
         return sym_new
 
-    @unary_op
     def time_antiderivative(self, sym, dsym):
         """These are actually a special class of operations.
 
@@ -680,7 +613,6 @@ class OpGraph(object):
         self._adj[sym] = self._op('time_antiderivative', dsym)
         return sym
 
-    @unary_op
     def identity(self, new_sym, sym):
         self._needs(sym)
         self._needs_not(new_sym)
@@ -739,7 +671,7 @@ class OpGraph(object):
         elif sym_type == 'group':
             text = "group({})".format(sym)
         else:
-            assert False
+            assert False, "{} unknown".format(sym_type)
 
         return text
 
@@ -827,10 +759,12 @@ def main():
 
     gr.add('RRa', 'R', 'Ra')
 
+    gr.time_antiderivative('R', 'q')
+
     print gr
 
 
 if __name__ == '__main__':
-    # main()
-    grouptest()
+    main()
+    # grouptest()
 
