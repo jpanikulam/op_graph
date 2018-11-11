@@ -1,5 +1,5 @@
-'''Graph tools for CPY
-'''
+"""Graph tools for CPY
+"""
 from functools import partial
 
 from graph_tools import topological_sort
@@ -159,7 +159,7 @@ class OpGraph(object):
         assert name in self._adj.keys(), "Symbol '{}' does not exist".format(name)
 
     def _needs_not(self, name):
-        '''Verify that name is currently not assigned.'''
+        """Verify that name is currently not assigned."""
         if name in self._adj.keys():
             assert self._adj[name] is None
         assert name not in self._adj.keys(), "Symbol '{}' already exists".format(name)
@@ -419,14 +419,14 @@ class OpGraph(object):
         return self._call(op_name, 'anon_' + self.unique(), *args)
 
     def _call_group(self, op_name, new, *args):
-        '''Now, the trick is to represent "implicit graphs" that arise
+        """Now, the trick is to represent "implicit graphs" that arise
         from groups.
 
         Unanswered Questions:
             - What does SO3(R) + x[3] look like, as groups?
             - How do you traverse a graph with a group?
                 - Should it be handled for you??
-        '''
+        """
         for arg in args:
             assert self._type(arg) == 'group'
 

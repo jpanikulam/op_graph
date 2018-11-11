@@ -37,7 +37,6 @@ def maybe_insert_deps(adj, visited, key, output, depth=0):
 
 
 def topological_sort(adj):
-    ''' TODO: Fix this.'''
     visited = defaultdict(lambda: False)
     result = []
     for element in adj.keys():

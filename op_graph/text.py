@@ -3,6 +3,7 @@ from subprocess import Popen, PIPE, STDOUT
 
 
 def form_line(ltokens=[], rtokens=[]):
+    """Form line."""
     if not isinstance(ltokens, (list, tuple)):
         return str(ltokens) + ';'
 
@@ -16,7 +17,6 @@ def form_line(ltokens=[], rtokens=[]):
 
 def clang_fmt(text, clang_format_path='/home/jacob/repos/llvm/clang-format'):
     """Generate formatted code."""
-
     if not os.path.exists(clang_format_path):
         raise ValueError("No clang-format!")
 

@@ -7,7 +7,6 @@ import create
 
 class CodeGraph(object):
     def __init__(self):
-        # self._adj = defaultdict(list)
         self._children = []
 
     def add_child(self, thing):
