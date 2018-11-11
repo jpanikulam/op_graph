@@ -79,6 +79,7 @@ def create_SO3():
 def create_SE3():
     return create_liegroup('SE3')
 
+
 def get_states(gr):
     states = []
     for name, definition in gr.adj.items():
@@ -102,7 +103,9 @@ class OpGraph(object):
         'SE3',
     ]
 
-    def __init__(self):
+    def __init__(self, name='OpGraph'):
+        self._name = name
+
         self._adj = {}
         self._properties = {}
 
@@ -332,10 +335,12 @@ class OpGraph(object):
 
         self._subgraph_functions[name] = {
             'graph': graph,
-            'sym': output_sym,
-            'inputs': input_map,
+            'returns': returns,
+            'args': tuple(args),
+            'input_names': tuple(input_map),
         }
-        return self.add_function(name, returns, args)
+        self.add_function(name, returns, args)
+        return input_map
 
     def add_function(self, f_name, returns, arguments):
         assert type(arguments) in (list, tuple), "Arguments must be in a list"
@@ -345,9 +350,9 @@ class OpGraph(object):
         valid_properties = {
             'commutative': (bool, False),
             'associative': (bool, False),
-            'positive':    (bool, False),
-            'negative':    (bool, False),
-            'invertible':  (bool, False),
+            'positive': (bool, False),
+            'negative': (bool, False),
+            'invertible': (bool, False),
         }
 
         self._functions[f_name].append({
@@ -408,7 +413,7 @@ class OpGraph(object):
 
     def degroupify(self, syms, group_sym):
         props = self._properties[group_sym]
-        elements = prop['elements']
+        elements = props['elements']
         assert len(syms) == len(elements), "Need same number of symbols as group"
         for n, sym in enumerate(syms):
             self.extract(syms, n, group_sym)
@@ -664,6 +669,15 @@ class OpGraph(object):
     def __str__(self):
         return self.dump()
 
+    def __repr__(self):
+        inputs = get_inputs(self)
+        types = self._types(inputs)
+        things = []
+        for input_, type_ in zip(inputs, types):
+            things.append("{}: {}".format(type_, input_))
+
+        return "{}({})".format(self._name, ', '.join(things))
+
 
 def grouptest():
     a = ['a0', 'a1', 'a2']
@@ -717,13 +731,26 @@ def main():
     gr.add('RRa', 'R', 'Ra')
     gr.time_antiderivative('R', 'q')
 
-    gr.groupify('Out', ['a', 'Ra'])
+    gr.groupify('Out', ['a', 'Ra', 'R'])
 
     gr2 = OpGraph()
     gr2.insert_subgraph(gr, 'Out', up_to=['inv_density'])
 
+    gr3 = OpGraph()
+    gr3.insert_graph_as_function('poopy_func', gr2, 'Out')
+
+    gr3.scalar('mass')
+    gr3.vector('u', 3)
+
+    gr3.func('rxx', 'poopy_func', 'u', 'mass')
+
     print gr
     print gr2
+    print gr3._subgraph_functions
+    print gr3
+
+    print gr3.adj['rxx']
+    print gr3.properties['rxx']
 
 
 if __name__ == '__main__':
