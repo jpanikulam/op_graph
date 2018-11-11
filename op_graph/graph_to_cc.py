@@ -116,6 +116,8 @@ def rk4_integrate(gr):
         qdot_gr.insert_subgraph(gr, statedot, up_to=states)
         qdot_gr.identity('{}_dot'.format(state), statedot)
 
+    print qdot_gr
+
     print '\nx:'
     print states
     print '\nu:'

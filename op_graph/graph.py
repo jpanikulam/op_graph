@@ -5,6 +5,8 @@ from functools import partial
 from graph_tools import topological_sort
 from collections import defaultdict
 
+from log import Log
+
 MACHINES_CONTROL_EVERYTHING = True
 
 #
@@ -223,12 +225,13 @@ class OpGraph(object):
         )
 
     def _copy_subgraph(self, gr, sym, up_to=[], allow_override=False):
-        '''This allows overriding existing symbols.'''
         if sym in up_to:
+            self._adj[sym] = None
+            self._properties[sym] = gr.properties[sym]
             return
 
         for o_sym in get_args(gr.adj[sym]):
-            self._copy_subgraph(gr, o_sym, up_to=up_to)
+            self._copy_subgraph(gr, o_sym, up_to=up_to, allow_override=allow_override)
 
         if not allow_override:
             self._needs_not(sym)
@@ -237,11 +240,13 @@ class OpGraph(object):
         self._properties[sym] = gr._properties[sym]
 
     def insert_subgraph(self, gr, sym, up_to=[]):
+        '''This allows overriding existing symbols.'''
         self._copy_subgraph(gr, sym, up_to, allow_override=True)
 
     def _inverse_adjacency(self):
         inv_adjacency = defaultdict(list)
         for sym, op in self._adj.items():
+            inv_adjacency[sym]
             for arg in get_args(op):
                 inv_adjacency[arg].append(sym)
         return inv_adjacency
@@ -340,9 +345,9 @@ class OpGraph(object):
         valid_properties = {
             'commutative': (bool, False),
             'associative': (bool, False),
-            'positive': (bool, False),
-            'negative': (bool, False),
-            'invertible': (bool, False),
+            'positive':    (bool, False),
+            'negative':    (bool, False),
+            'invertible':  (bool, False),
         }
 
         self._functions[f_name].append({
@@ -362,7 +367,7 @@ class OpGraph(object):
         assert func in self._functions.keys()
         overloaded_funcs = self._functions[func]
 
-        arg_props = [self._properties[arg] for arg in args]
+        arg_props = tuple([self._properties[arg] for arg in args])
 
         for function in overloaded_funcs:
             if function['args'] == arg_props:
@@ -390,6 +395,25 @@ class OpGraph(object):
         self._adj[group_sym] = self._op('groupify', *syms)
         self._properties[group_sym] = group_properties
         return group_sym
+
+    def extract(self, sym, index, group_sym):
+        self._needs_not(sym)
+        props = self._properties[group_sym]
+        elements = props['elements']
+        assert len(elements) > index
+
+        self._adj[sym] = self._op('extract', group_sym, index)
+        self._properties[sym] = elements[index]
+        return sym
+
+    def degroupify(self, syms, group_sym):
+        props = self._properties[group_sym]
+        elements = prop['elements']
+        assert len(syms) == len(elements), "Need same number of symbols as group"
+        for n, sym in enumerate(syms):
+            self.extract(syms, n, group_sym)
+
+        return syms
 
     """
     @unary_op
@@ -452,7 +476,7 @@ class OpGraph(object):
             need(*args)
 
         if 'generate' in real_func.keys():
-            real_func['generate'](*args)
+            return real_func['generate'](new, *args)
         else:
             self._adj[new] = self._op(op_name, *args)
             self._properties[new] = real_func['returns'](*args)
@@ -475,7 +499,7 @@ class OpGraph(object):
             ('liegroup', 'vector'): {
                 'returns': self._inherit_last,
                 'needs': [self._needs_valid_derivative_type],
-                'generate': lambda a, b: self._anony_call('mul', a, self._anony_call('exp', b))
+                'generate': lambda n, a, b: self._call('mul', n, a, self._anony_call('exp', b))
             },
             ('vector', 'vector'): {
                 'returns': self._inherit_last,
@@ -707,6 +731,12 @@ class OpGraph(object):
             total_text += "{} <- {}\n".format(self.to_text(sym), text)
         return total_text
 
+    def warnings(self):
+        inv_adjacency = self._inverse_adjacency()
+        for sym, parents in inv_adjacency.items():
+            if len(parents) == 0:
+                Log.warn("[WARN] {} is unused".format(sym))
+
     def __str__(self):
         return self.dump()
 
@@ -748,23 +778,34 @@ def grouptest():
 
 def main():
     gr = OpGraph()
-    gr.scalar('density')
+
+    gr.scalar('super_density')
     gr.scalar('mass')
     gr.so3('R')
 
     gr.vector('q', 3)
 
-    gr.mul('a', gr.inv('f', 'density'), 'q')
+    gr.mul('density', 'mass', 'super_density')
+    gr.mul('a', gr.inv('inv_density', 'density'), 'q')
     gr.mul('Ra', 'R', 'a')
 
+    # Broken -- Define op
     gr.add('RRa', 'R', 'Ra')
 
     gr.time_antiderivative('R', 'q')
 
+    gr.groupify('Out', ['a', 'Ra'])
+
+
+    gr2 = OpGraph()
+    gr2.insert_subgraph(gr, 'Out', up_to=['inv_density'])
+
     print gr
+
+
+    print gr2
 
 
 if __name__ == '__main__':
     main()
     # grouptest()
-

@@ -6,8 +6,8 @@ import graph_to_cc
 def make_simple_jet():
     graph = OpGraph()
 
-    # Unoptimized
     graph.scalar('density')
+    # Unoptimized
     graph.scalar('mass')
 
     graph.so3('R_world_from_body')
@@ -31,13 +31,14 @@ def make_simple_jet():
     graph.func('thrust', 'force_from_throttle', 'throttle_pct', 'v')
 
     graph.vector('unit_z', 3)
-    graph.mul('force', 'R_world_from_body', graph.mul('body_force', 'thrust', 'unit_z'))
+    graph.mul('force_world', 'R_world_from_body', graph.mul('body_force', 'thrust', 'unit_z'))
 
-    graph.mul('a', graph.inv('inv_mass', 'mass'), 'force')
+    graph.mul('a', graph.inv('inv_mass', 'mass'), 'force_world')
 
     graph.time_antiderivative('v', 'a')
     graph.time_antiderivative('x', 'v')
 
+    graph.warnings()
     return graph
 
 
@@ -45,6 +46,8 @@ def main():
     jet_graph = make_simple_jet()
 
     # graph_to_cc.express(jet_graph)
+
+    print jet_graph
 
     gd.make_types(jet_graph)
     gd.generate_dynamics(jet_graph)
