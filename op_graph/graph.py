@@ -240,7 +240,7 @@ class OpGraph(object):
         self._properties[sym] = gr._properties[sym]
 
     def insert_subgraph(self, gr, sym, up_to=[]):
-        '''This allows overriding existing symbols.'''
+        """This allows overriding existing symbols."""
         self._copy_subgraph(gr, sym, up_to, allow_override=True)
 
     def _inverse_adjacency(self):
@@ -415,16 +415,6 @@ class OpGraph(object):
 
         return syms
 
-    """
-    @unary_op
-    def inv(self, sym_new, sym):
-        self._needs(sym)
-        self._needs_not(sym_new)
-        self._adj[sym_new] = self._op('inv', sym)
-        self._properties[sym_new] = self._inherit(sym)
-        return sym_new
-    """
-
     def _anony_call(self, op_name, *args):
         return self._call(op_name, 'anon_' + self.unique(), *args)
 
@@ -510,36 +500,6 @@ class OpGraph(object):
                 'needs': [self._needs_same]
             },
         }
-    '''
-    @binary_op
-    def add(self, sym_new, sym_a, sym_b):
-        """Generate a node which is the sum of a and b."""
-        self._needs(sym_a)
-        self._needs(sym_b)
-
-        if self._type(sym_a) == 'liegroup':
-            exp_b = self.exp('exp_{}'.format(sym_b), sym_b)
-            return self.mul("{}{}".format(exp_b, sym_a), exp_b, sym_b)
-
-        self._needs_same(sym_a, sym_b)
-        self._needs_not(sym_new)
-        self._adj[sym_new] = self._op('add', sym_a, sym_b)
-        self._properties[sym_new] = self._inherit(sym_a)
-        return sym_new
-    '''
-
-    """
-    def _liegroup_mul(self, sym_new, g, vec):
-        self._needs_type(g, 'liegroup')
-        self._needs_type(vec, ('liegroup', 'vector'))
-        self._needs_same_dim(g, vec)
-        return self._inherit(vec)
-
-    def _scalar_mul(self, sym_new, a, b):
-        self._needs_type(a, 'scalar')
-        self._needs_type(b, ('scalar', 'vector'))
-        return self._inherit(b)
-    """
 
     def _mul(self):
         # How do we generate *template* types?
@@ -562,26 +522,6 @@ class OpGraph(object):
                 'needs': [self._needs_same]
             },
         }
-    '''
-    @binary_op
-    def mul(self, sym_new, a, b):
-        "Generate a node which is the product of a and b."""
-        self._needs(a)
-        self._needs(b)
-        self._needs_not(sym_new)
-
-        dispatch_table = {
-            'liegroup': self._liegroup_mul,
-            'scalar': self._scalar_mul,
-        }
-
-        a_type = self._type(a)
-        properties = dispatch_table[a_type](sym_new, a, b)
-
-        self._adj[sym_new] = self._op('mul', a, b)
-        self._properties[sym_new] = properties
-        return sym_new
-    '''
 
     def _exp(self):
         return {
@@ -594,21 +534,6 @@ class OpGraph(object):
                 'needs': []
             }
         }
-
-    '''
-    @unary_op
-    def exp(self, sym_new, a, kind=None):
-        self._needs(a)
-        self._needs_valid_liegroup(kind)
-
-        a_prop = self._properties[a]
-        new_liegroup = create_liegroup(kind)
-        assert new_liegroup['algebra_dim'] == a_prop['dim']
-
-        self._adj[sym_new] = self._op('exp', a)
-        self._properties[sym_new] = new_liegroup
-        return sym_new
-    '''
 
     # @unary_op
     def log(self, sym_new, a, kind=None):
@@ -664,7 +589,6 @@ class OpGraph(object):
 
         if op is not None:
             sub_ops = tuple(map(self.how_do_i_compute, op[1]))
-
             replaced_op = (op[0], sub_ops)
         else:
             replaced_op = sym
@@ -791,18 +715,14 @@ def main():
 
     # Broken -- Define op
     gr.add('RRa', 'R', 'Ra')
-
     gr.time_antiderivative('R', 'q')
 
     gr.groupify('Out', ['a', 'Ra'])
-
 
     gr2 = OpGraph()
     gr2.insert_subgraph(gr, 'Out', up_to=['inv_density'])
 
     print gr
-
-
     print gr2
 
 
