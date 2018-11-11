@@ -100,44 +100,64 @@ def rk4_integrate(gr):
 
     """
     # Compute qdot
-    qdot_gr = graph.OpGraph()
-    qdot = set()
-
     states = graph.get_states(gr)
 
-    for state in states:
+    # for state in states:
         # All states are inputs.
-        qdot_gr.emplace(state, gr.properties[state])
+        # qdot_gr.emplace(state, gr.properties[state])
 
+    q = []
+    qdot = []
     for state in states:
         statedot = graph.get_args(gr.adj[state])[0]
-        qdot.add(statedot)
+        qdot.append(statedot)
+        q.append(state)
 
-        qdot_gr.insert_subgraph(gr, statedot, up_to=states)
-        qdot_gr.identity('{}_dot'.format(state), statedot)
+        # qdot_gr.insert_subgraph(gr, statedot, up_to=states)
+        # qdot_gr.identity('{}_dot'.format(state), statedot)
 
-    print qdot_gr
-
-    print '\nx:'
-    print states
-    print '\nu:'
-    print gr.to_optimize
-    print '\nz:'
-    print graph.get_inputs(gr).intersection(graph.get_inputs(qdot_gr)) - gr.to_optimize
-    print '\nqdot:'
-    print qdot
+    # print '\nx:'
+    # print states
+    # print '\nu:'
+    # print gr.to_optimize
+    # print '\nz:'
+    # print graph.get_inputs(gr).intersection(graph.get_inputs(qdot_gr)) - gr.to_optimize
+    # print '\nqdot:'
+    # print qdot
 
     qdot_group = gr.groupify('Qdot', qdot)
-    states = gr.groupify('Q', tuple(states))
+    states = gr.groupify('Q', q)
 
-    print states
-    print qdot_group
+    rk4_gr = graph.OpGraph('qdot')
+    rk4_gr.insert_subgraph_as_function(
+        'qdot',
+        gr,
+        'Qdot',
+        up_to=q,
+        input_order=q
+    )
 
-    print gr
+
+    print rk4_gr
+
+    h = rk4_gr.scalar('h2')
+
+    # k1 = rk4_gr.
+    for qq in q:
+        rk4_gr.emplace(qq, gr.properties[qq])
+
+    vv = deepcopy(q)
+    vv.append(rk4_gr.scalar('m'))
+    vv.append(rk4_gr.scalar('i'))
+    print rk4_gr._functions
+    k1 = rk4_gr.func('k1', 'qdot', *vv)
+
+    print rk4_gr
+
+    exit(0)
 
     # k1 = deepcopy(qdot_gr)
     # k2 = deepcopy(qdot_gr)
-    h = k2.scalar('h2')
 
     repls = {}
     for state in qdot:
@@ -214,15 +234,36 @@ def express(gr):
     print cb
 
 
-def test_graph():
-    gr = graph.OpGraph()
+def vectorspring():
+    gr = graph.OpGraph('VectorSpring')
+    k = gr.scalar('k')
 
-    a = gr.scalar('a')
+    imass = gr.inv('imass', gr.scalar('mass'))
+
+    # x = gr.vector('x', 3)
+    a = gr.vector('a', 3)
+    v = gr.time_antiderivative('v', a)
+    x = gr.time_antiderivative('x', v)
+
+    f = gr.mul('f', k, x)
+    gr.mul('a', imass, 'f')
+    print gr
+    print graph.get_states(gr)
+    return gr
+
+def simple_graph():
+    gr = graph.OpGraph('Simple')
+
+    a = gr.scalar('k')
     b = gr.scalar('b')
     gr.mul('ab', a, b)
     d = gr.time_antiderivative('d', 'ab')
     gr.time_antiderivative('e', d)
     print gr
+
+def test_graph():
+    # simple = simple_graph()
+    gr = vectorspring()
 
     # Unoptimized
     # gr.so3('e')

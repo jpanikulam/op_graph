@@ -165,7 +165,8 @@ class OpGraph(object):
         """Verify that name is currently not assigned."""
         if name in self._adj.keys():
             assert self._adj[name] is None
-        assert name not in self._adj.keys(), "Symbol '{}' already exists".format(name)
+        else:
+            assert name not in self._adj.keys(), "Symbol '{}' already exists".format(name)
 
     def _inherit(self, from_b):
         if isinstance(from_b, dict):
@@ -246,6 +247,11 @@ class OpGraph(object):
         """This allows overriding existing symbols."""
         self._copy_subgraph(gr, sym, up_to, allow_override=True)
 
+    def insert_subgraph_as_function(self, name, gr, output_sym, up_to=[], input_order=[]):
+        grx = OpGraph('grx')
+        grx.insert_subgraph(gr, output_sym, up_to=up_to)
+        self.add_graph_as_function(name, grx, output_sym, input_order=input_order)
+
     def _inverse_adjacency(self):
         inv_adjacency = defaultdict(list)
         for sym, op in self._adj.items():
@@ -317,19 +323,31 @@ class OpGraph(object):
         self._properties[name] = create_SE3()
         return name
 
-    def insert_graph_as_function(self, name, graph, output_sym):
+    def add_graph_as_function(self, name, graph, output_sym, input_order=[]):
         """Graph can't contain derivatives.
 
         How to handle groups?
             One idea is to make groups *themeselves* symbols in a style like hcat
         """
+        assert isinstance(input_order, (list, tuple))
+
         returns = graph.properties[output_sym]
         graph._needs(output_sym)
 
         graph_inputs = get_inputs(graph)
+
+        if len(input_order) == 0:
+            input_order = tuple(graph_inputs)
+        # assert len(input_order) == len(graph_inputs)
+        assert len(set(input_order) - graph_inputs) == 0
+        real_input_order = list(input_order)
+        for inp in graph_inputs:
+            if inp not in input_order:
+                real_input_order.append(inp)
+
         args = []
         input_map = []
-        for inp in graph_inputs:
+        for inp in real_input_order:
             args.append(graph.properties[inp])
             input_map.append(inp)
 
@@ -369,7 +387,7 @@ class OpGraph(object):
         return (name, args)
 
     def func(self, sym_new, func, *args):
-        assert func in self._functions.keys()
+        assert func in self._functions.keys(), "{} not known".format(func)
         overloaded_funcs = self._functions[func]
 
         arg_props = tuple([self._properties[arg] for arg in args])
@@ -737,7 +755,7 @@ def main():
     gr2.insert_subgraph(gr, 'Out', up_to=['inv_density'])
 
     gr3 = OpGraph()
-    gr3.insert_graph_as_function('poopy_func', gr2, 'Out')
+    gr3.add_graph_as_function('poopy_func', gr2, 'Out')
 
     gr3.scalar('mass')
     gr3.vector('u', 3)
