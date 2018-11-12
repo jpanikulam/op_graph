@@ -21,6 +21,12 @@ def get_args(op):
         return []
 
 
+def create_constant(value, properties):
+    """TODO is this the right approach?"""
+    properties['constant'] = True
+    properties['value'] = value
+    return properties
+
 def create_scalar():
     prop = {
         'type': 'scalar',
@@ -68,7 +74,7 @@ def create_group(element_properties):
     assert isinstance(element_properties, (list, tuple))
     return {
         'type': 'group',
-        'elements': element_properties,
+        'elements': tuple(element_properties),
     }
 
 
@@ -95,6 +101,11 @@ def get_inputs(gr):
         if definition is None:
             inputs.append(name)
     return set(inputs)
+
+
+def get_parameters(gr):
+    parameters = (get_inputs(gr) - gr.to_optimize) - get_states(gr)
+    return parameters
 
 
 class OpGraph(object):
@@ -164,7 +175,7 @@ class OpGraph(object):
     def _needs_not(self, name):
         """Verify that name is currently not assigned."""
         if name in self._adj.keys():
-            assert self._adj[name] is None
+            assert self._adj[name] is None, "{} must be unset".format(name)
         else:
             assert name not in self._adj.keys(), "Symbol '{}' already exists".format(name)
 
@@ -250,6 +261,8 @@ class OpGraph(object):
     def insert_subgraph_as_function(self, name, gr, output_sym, up_to=[], input_order=[]):
         grx = OpGraph('grx')
         grx.insert_subgraph(gr, output_sym, up_to=up_to)
+        for inp in set(input_order) - set(grx.adj.keys()):
+            grx.emplace(inp, gr.properties[inp])
         self.add_graph_as_function(name, grx, output_sym, input_order=input_order)
 
     def _inverse_adjacency(self):
@@ -303,6 +316,14 @@ class OpGraph(object):
         self._properties[name] = properties
         return name
 
+    def constant_scalar(self, name, value):
+        self._adj[value] = self._op('null')
+        # self._properties[name] = create_constant(value, create_scalar())
+        self._properties[value] = create_scalar()
+        # self._call('identity', name, value)
+        self.identity(name, value)
+        return name
+
     def scalar(self, name):
         self._adj[name] = None
         self._properties[name] = create_scalar()
@@ -339,7 +360,7 @@ class OpGraph(object):
         if len(input_order) == 0:
             input_order = tuple(graph_inputs)
         # assert len(input_order) == len(graph_inputs)
-        assert len(set(input_order) - graph_inputs) == 0
+        # assert len(set(input_order) - graph_inputs) == 0
         real_input_order = list(input_order)
         for inp in graph_inputs:
             if inp not in input_order:
@@ -351,18 +372,22 @@ class OpGraph(object):
             args.append(graph.properties[inp])
             input_map.append(inp)
 
+        args = tuple(args)
+
         self._subgraph_functions[name] = {
             'graph': graph,
             'returns': returns,
-            'args': tuple(args),
+            'args': args,
             'input_names': tuple(input_map),
         }
         self.add_function(name, returns, args)
+        self.add_function(name, returns, [create_group(args)])
         return input_map
 
     def add_function(self, f_name, returns, arguments):
         assert type(arguments) in (list, tuple), "Arguments must be in a list"
-        assert f_name not in self._functions.keys(), "Function already exists"
+        # TODO: Assert no override existing signature
+        # assert f_name not in self._functions.keys(), "Function already exists"
 
         # TODO : use this
         valid_properties = {
@@ -386,7 +411,7 @@ class OpGraph(object):
     def _op(self, name, *args):
         return (name, args)
 
-    def func(self, sym_new, func, *args):
+    def func(self, func, sym_new, *args):
         assert func in self._functions.keys(), "{} not known".format(func)
         overloaded_funcs = self._functions[func]
 
@@ -397,6 +422,13 @@ class OpGraph(object):
                 explicit_func = function
                 break
         else:
+            Log.warn("No valid function for: {}({})".format(
+                func,
+                arg_props
+            ))
+            Log.info("Possible examples: ")
+            for function in overloaded_funcs:
+                Log.info(function['args'])
             raise KeyError("No valid function.")
 
         for supplied_arg, expected_property in zip(args, explicit_func['args']):
@@ -412,12 +444,36 @@ class OpGraph(object):
     def groupify(self, group_sym, syms=[]):
         """Creates a group."""
         assert len(syms) > 1, "Not enough symbols!"
+        self._needs_not(group_sym)
 
         properties = map(self._properties.get, syms)
         group_properties = create_group(properties)
         self._adj[group_sym] = self._op('groupify', *syms)
         self._properties[group_sym] = group_properties
         return group_sym
+
+    def extend_group(self, new_group_sym, old_group_sym, new_syms=[]):
+        self._needs_not(new_group_sym)
+        assert len(new_syms) > 1, "Not enough symbols"
+        new_properties = []
+        old_properties = self._properties[old_group_sym]['elements']
+        new_properties.extend(old_properties)
+        new_properties.extend(map(self._properties.get(syms)))
+        self._adj[new_group_sym] = self._op('extend_group', old_group_sym, *syms)
+        self._properties[new_group_sym] = create_group(new_properties)
+        return new_group_sym
+
+    def combine_groups(self, new_group_sym, sym_groups=[]):
+        self._needs_not(new_group_sym)
+        new_properties = []
+        for group in sym_groups:
+            old_properties = self._properties[group]
+            self._needs_type(group, 'group')
+            new_properties.extend(old_properties['elements'])
+
+        self._adj[new_group_sym] = self._op('combine_groups', *sym_groups)
+        self._properties[new_group_sym] = create_group(new_properties)
+        return new_group_sym
 
     def extract(self, sym, index, group_sym):
         self._needs_not(sym)
@@ -476,7 +532,7 @@ class OpGraph(object):
         assert op_name in self._ops.keys(), "Unknown operation: {}".format(op_name)
         op_def = self._ops[op_name]
 
-        if self._type(args[0]) == 'group':
+        if 'group' in self._types(args):
             return self._call_group(op_name, new, *args)
 
         types = tuple(map(lambda o: self._type(o), args))
@@ -629,18 +685,20 @@ class OpGraph(object):
 
     def to_text(self, sym):
         sym_type = self._type(sym)
+        sym_prop = self._properties[sym]
+
         if sym_type == 'vector':
             text = "{}[{}]".format(
                 sym,
                 self._properties[sym]['dim']
             )
         elif sym_type == 'scalar':
-            text = "{}".format(sym)
+                text = "{}".format(sym)
         elif sym_type == 'liegroup':
-            group = self._properties[sym]['subtype']
-            text = "{}({})".format(group, sym)
+            group = sym_prop['subtype']
+            text = "{}[{}]".format(group, sym)
         elif sym_type == 'group':
-            text = "group({})".format(sym)
+            text = "G[{}]".format(sym)
         else:
             assert False, "{} unknown".format(sym_type)
 
@@ -654,12 +712,13 @@ class OpGraph(object):
             'mul': lambda o: "{} * {}".format(self.to_text(args[0]), self.to_text(args[1])),
             'time_antiderivative': lambda o: "\\int({})".format(self.to_text(args[0])),
             'inv': lambda o: "{}^-1".format(self.to_text(args[0])),
+            'null': lambda o: 'null()',
         }
 
         def alt(operation):
             op_name = operation[0]
             args = operation[1]
-            return "{}({})".format(op_name, ', '.join(args))
+            return "{}({})".format(op_name, ', '.join(map(str, args)))
 
         text = do.get(op_name, alt)(op)
         return text
@@ -760,7 +819,10 @@ def main():
     gr3.scalar('mass')
     gr3.vector('u', 3)
 
-    gr3.func('rxx', 'poopy_func', 'u', 'mass')
+    gr3.func('poopy_func', 'rxx', 'u', 'mass')
+
+
+    gr3.constant_scalar('half', 0.5)
 
     print gr
     print gr2
