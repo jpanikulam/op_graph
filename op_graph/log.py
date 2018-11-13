@@ -18,8 +18,8 @@ from collections import OrderedDict
 
 class Log(object):
     _verbosities = OrderedDict([
-        ("debug", Fore.LIGHTBLUE_EX),
-        ("info", Fore.WHITE),
+        ("debug", Fore.WHITE),
+        ("info", Fore.LIGHTBLUE_EX),
         ("success", Fore.LIGHTGREEN_EX),
         ("warn", Fore.YELLOW),
         ("error", Fore.RED),

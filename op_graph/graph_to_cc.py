@@ -10,7 +10,7 @@ import string
 
 def to_cpp_type(properties):
     choices = {
-        'liegroup': lambda: properties['subtype'] if 'subtype' in properties.keys() else '',
+        'liegroup': lambda: properties['subtype'],
         'vector': lambda: 'VecNd<{}>'.format(properties['dim']),
         'scalar': lambda: 'double',
     }
@@ -28,15 +28,15 @@ def illegal(sym_name):
     for ill in illegal:
         if ill in sym_name:
             return True
-    for char in name:
+    for char in sym_name:
         if char in string.punctuation.replace('_', ''):
             return True
         if char.isspace():
             return True
-    if name[0].isdigit():
+    if sym_name[0].isdigit():
         return True
 
-    if name[0] in ['_']:
+    if sym_name[0] in ['_']:
         return True
 
     return False
@@ -108,6 +108,46 @@ def get_dependency_subgraph(gr, sym, up_to=[], excludes=[]):
     return deps
 
 
+def insert_qdot_function(gr, rk4_gr):
+    states = graph.get_states(gr)
+    optimize = gr.to_optimize
+
+    q = []
+    qdot = []
+    u = list(gr.to_optimize)
+    z = list(graph.get_parameters(gr))
+
+    for state in states:
+        statedot = graph.get_args(gr.adj[state])[0]
+        qdot.append(statedot)
+        q.append(state)
+    Qdot = gr.groupify('Qdot', qdot, inherent_type='State')
+    qdot_gr = gr.extract_subgraph(Qdot, up_to=q)
+    print qdot_gr
+
+    for qq in q:
+        qdot_gr.emplace(qq, gr.properties[qq])
+
+    for uu in u:
+        qdot_gr.emplace(uu, gr.properties[uu])
+
+    for zz in z:
+        qdot_gr.emplace(zz, gr.properties[zz])
+
+    Q = qdot_gr.pregroup('Q', q, inherent_type='State')
+    U = qdot_gr.pregroup('U', u, inherent_type='Controls')
+    Z = qdot_gr.pregroup('Z', z, inherent_type='Parameters')
+
+    rk4_gr.add_graph_as_function(
+        'qdot',
+        graph=qdot_gr,
+        output_sym=Qdot,
+        input_order=[Q, U, Z]
+    )
+
+    return q, u, z
+
+
 def rk4_integrate(gr):
     """How do we compute this.
 
@@ -128,56 +168,50 @@ def rk4_integrate(gr):
 
     """
     # Compute qdot
-    states = graph.get_states(gr)
-
-    q = []
-    qdot = []
-    for state in states:
-        statedot = graph.get_args(gr.adj[state])[0]
-        qdot.append(statedot)
-        q.append(state)
-
-    qdot_group = gr.groupify('Qdot', qdot)
-    states = gr.groupify('Q', q)
-
-    parameters = list(graph.get_parameters(gr))
-    print 'Parames', parameters
-
     rk4_gr = graph.OpGraph('qdot')
-    rk4_gr.insert_subgraph_as_function(
-        'qdot',
-        gr,
-        'Qdot',
-        up_to=q,
-        input_order=q + parameters
-    )
-
-    for parameter in parameters:
-        rk4_gr.emplace(parameter, gr.properties[parameter])
-
-    h = rk4_gr.scalar('h')
-    half = rk4_gr.constant_scalar('half', 0.5)
-    h_2 = rk4_gr.mul('h_2', 'h', 'half')
-
-    H_2 = rk4_gr.groupify('H_2', [h_2] * len(q))
-    H = rk4_gr.groupify('H', [h] * len(q))
-
+    q, u, z = insert_qdot_function(gr, rk4_gr)
     for qq in q:
         rk4_gr.emplace(qq, gr.properties[qq])
 
-    Q = rk4_gr.groupify('Q', q)
-    Z = rk4_gr.groupify('Z', parameters)
+    for uu in u:
+        rk4_gr.emplace(uu, gr.properties[uu])
 
-    K1 = rk4_gr.func('qdot', 'K1', rk4_gr.combine_groups('Q;Z', [Q, Z]))
+    for zz in z:
+        rk4_gr.emplace(zz, gr.properties[zz])
 
-    Q2 = rk4_gr.add('Q2', Q, rk4_gr.mul('h_2k1', H_2, K1))
-    K2 = rk4_gr.func('qdot', 'K2', rk4_gr.combine_groups('Q2;Z', [Q2, Z]))
+    half = rk4_gr.constant_scalar('half', 0.5)
+    sixth = rk4_gr.constant_scalar('sixth', 1.0 / 6.0)
+    two = rk4_gr.constant_scalar('two', 2.0)
+    SIXTH = rk4_gr.groupify('SIXTH', [sixth] * len(q))
+    TWO = rk4_gr.groupify('TWO', [two] * len(q))
 
-    Q3 = rk4_gr.add('Q3', Q, rk4_gr.mul('h_2k2', H_2, K2))
-    K3 = rk4_gr.func('qdot', 'K3', rk4_gr.combine_groups('Q3;Z', [Q3, Z]))
+    h = rk4_gr.scalar('h')
+    half_h = rk4_gr.mul('half_h', 'h', half)
 
-    Q4 = rk4_gr.add('Q4', Q, rk4_gr.mul('hk3', H, K3))
-    K4 = rk4_gr.func('qdot', 'K4', rk4_gr.combine_groups('Q4;Z', [Q4, Z]))
+    HALF_H = rk4_gr.groupify('HALF_H', [half_h] * len(q))
+    H = rk4_gr.groupify('H', [h] * len(q))
+
+    Q = rk4_gr.pregroup('Q', q, inherent_type='State')
+    U = rk4_gr.pregroup('U', u, inherent_type='Controls')
+    Z = rk4_gr.pregroup('Z', z, inherent_type='Parameters')
+
+    K1 = rk4_gr.func('qdot', 'K1', Q, U, Z)
+
+    Q2 = rk4_gr.add('Q2', Q, rk4_gr.mul('H_2k1', HALF_H, K1))
+    K2 = rk4_gr.func('qdot', 'K2', Q2, U, Z)
+
+    Q3 = rk4_gr.add('Q3', Q, rk4_gr.mul('H_2k2', HALF_H, K2))
+    K3 = rk4_gr.func('qdot', 'K3', Q3, U, Z)
+
+    Q4 = rk4_gr.add('Q4', Q, rk4_gr.mul('Hk3', H, K3))
+    K4 = rk4_gr.func('qdot', 'K4', Q4, U, Z)
+
+    k1_and_k4 = rk4_gr.add('K1_k4_sum', K1, K4)
+    k2_and_k3 = rk4_gr.mul('K2_k3', TWO, rk4_gr.add('K2_k3_sum', K2, K3))
+    Ksum = rk4_gr.add('Ksum', k1_and_k4, k2_and_k3)
+    Qn = rk4_gr.add('Qn', Q, rk4_gr.mul('Sixth_ksum', SIXTH, Ksum))
+
+    print rk4_gr
     return rk4_gr
 
 
@@ -211,12 +245,11 @@ def op_to_cc(op, gr):
         'mul': partial(binary, operator='*'),
         'exp': func,
         'log': func,
-        'null': func,
         'inv': inv,
         'I': lambda op, gr: graph.get_args(op)[0],
     }
 
-    result = dispatch[op[0]](op, gr)
+    result = dispatch.get(op[0], func)(op, gr)
     return result
 
 
@@ -225,10 +258,21 @@ def express(gr):
 
     cb = generate.CodeBlock()
 
+    structs = gr.groups()
+    for struct in structs:
+        print struct
+    exit()
+
+    print gr_sorted
+    print gr
     for sym in gr_sorted:
         op = gr.adj[sym]
         if op is not None:
             sym_prop = gr.properties[sym]
+
+            # if sym_prop['type'] == 'group':
+                # continue
+
             decl = "const {type} {name}".format(
                 type=to_cpp_type(sym_prop),
                 name=sym
@@ -253,18 +297,31 @@ def vectorspring():
     gr.mul('a', imass, 'f')
     return gr
 
+
 def simple_graph():
     gr = graph.OpGraph('Simple')
 
     a = gr.scalar('a')
+    gr.optimize(a)
     b = gr.scalar('b')
     gr.mul('ab', a, b)
     d = gr.time_antiderivative('d', 'ab')
     gr.time_antiderivative('e', d)
     return gr
 
+
+def double_integrator():
+    gr = graph.OpGraph('double_integrator')
+    gr.scalar('u')
+    gr.optimize('u')
+    gr.time_antiderivative('v', 'u')
+    gr.time_antiderivative('x', 'v')
+    return gr
+
+
 def test_graph():
-    gr = simple_graph()
+    gr = double_integrator()
+    # gr = simple_graph()
     # gr = vectorspring()
 
     # Unoptimized
