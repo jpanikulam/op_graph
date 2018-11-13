@@ -270,6 +270,11 @@ class OpGraph(object):
         )
 
     def _copy_subgraph(self, gr, sym, up_to=[], allow_override=False):
+        for target in up_to:
+            if target not in gr.adj:
+                Log.warn("Copying subgraph, but a target: {} is not present ".format(sym))
+                assert False
+
         if sym in up_to:
             self._adj[sym] = None
             self._properties[sym] = gr.properties[sym]
@@ -286,7 +291,7 @@ class OpGraph(object):
 
     def insert_subgraph(self, gr, sym, up_to=[]):
         """This allows overriding existing symbols."""
-        self._copy_subgraph(gr, sym, up_to, allow_override=True)
+        self._copy_subgraph(gr, sym, up_to=up_to, allow_override=True)
 
     def extract_subgraph(self, sym, up_to=[]):
         grx = OpGraph('grx')
