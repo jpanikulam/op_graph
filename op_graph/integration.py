@@ -55,6 +55,12 @@ def insert_qdot_function(gr, rk4):
         statedot = graph.get_args(gr.adj[state])[0]
         qdot.append(statedot)
         q.append(state)
+
+    gr.register_group_type('StateDot', qdot)
+    gr.register_group_type('State', q)
+    gr.register_group_type('Controls', u)
+    gr.register_group_type('Parameters', z)
+
     Qdot = gr.groupify('Qdot', qdot, inherent_type='StateDot')
     qdot_gr = gr.extract_subgraph(Qdot, up_to=q)
 
@@ -137,7 +143,7 @@ def rk4_integrate(gr):
     Q3 = rk4.add('Q3', Q, rk4.mul(rk4.anon(), HALF_H, K2))
     K3 = rk4.func('compute_qdot', 'K3', Q3, U, Z)
 
-    Q4 = rk4.add('Q4', Q, rk4.mul('Hk3', H, K3))
+    Q4 = rk4.add('Q4', Q, rk4.mul(rk4.anon(), H, K3))
     K4 = rk4.func('compute_qdot', 'K4', Q4, U, Z)
 
     k1_and_k4 = rk4.add(rk4.anon(), K1, K4)

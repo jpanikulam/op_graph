@@ -134,6 +134,8 @@ class OpGraph(object):
         # A convenience for naming
         self._uniques = set()
 
+        self._group_types = {}
+
         self._op_table = {}
         self._op_table['mul'] = self._mul()
         self._op_table['add'] = self._add()
@@ -168,8 +170,10 @@ class OpGraph(object):
         for sym in gr._uniques.intersection(syms):
             self._uniques.add(sym)
 
+        # TODO: Make sure this doesn't overwrite anything
+        self._group_types.update(gr._group_types)
+
     def subgraph_functions(self):
-        # yield self._subgraph_functions
         for name, funcs in self._subgraph_functions.items():
             for func in funcs:
                 yield (name, func)
@@ -182,6 +186,9 @@ class OpGraph(object):
                 if prop['elements'] not in groups:
                     groups.append(prop['elements'])
         return groups
+
+    def register_group_type(self, name, field_names=[]):
+        self._group_types[name] = field_names
 
     def anon(self):
         return self.unique("anon")
@@ -225,6 +232,10 @@ class OpGraph(object):
     def _needs_iter(self, thing):
         assert isinstance(thing, (list, tuple)), "Expected list or tuple"
         return tuple(thing)
+
+    def _needs_inherent_type(self, inherent_type):
+        if inherent_type is not None:
+            assert inherent_type in self._group_types.keys(), "{} is unknown".format(inherent_type)
 
     def _inherit(self, from_b):
         if isinstance(from_b, dict):
@@ -371,6 +382,7 @@ class OpGraph(object):
 
     def pregroup(self, pregroup_name, syms=[], inherent_type=None):
         self._needs_iter(syms)
+        self._needs_inherent_type(inherent_type)
         props = []
         for sym in syms:
             self._needs_input(sym)
@@ -425,6 +437,7 @@ class OpGraph(object):
             One idea is to make groups *themeselves* symbols in a style like hcat
         """
         self._needs_iter(input_order)
+        self.mimic_graph(graph)
 
         returns = graph.properties[output_sym]
         graph._needs(output_sym)
@@ -516,6 +529,7 @@ class OpGraph(object):
         """Creates a group."""
         # assert len(syms) > 0, "Not enough symbols!"
         self._needs_not(group_sym)
+        self._needs_inherent_type(inherent_type)
 
         properties = []
         for sym in syms:

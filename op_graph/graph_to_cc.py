@@ -120,12 +120,10 @@ def sym_children_to_cc(sym, gr):
 
     op = gr.adj[sym]
     result = dispatch.get(op[0], func)(sym, gr)
-
     return result
 
 
-
-def group_to_struct(gr, group_sym, names):
+def group_to_struct(gr, group_sym):
     props = gr.properties[group_sym]
     inherent_type = props['inherent_type']
     assert inherent_type is not None
@@ -168,7 +166,7 @@ def express(gr):
     inputs = graph.get_inputs(gr)
     cb = generate.CodeBlock()
 
-    structs = gr.groups()
+    # structs = gr.groups()
     # for struct in structs:
         # nstruct = group_to_struct(gr, struct, )
         # generate.generate_struct(nstruct)
