@@ -6,13 +6,29 @@ def vectorspring():
 
     imass = gr.inv('imass', gr.scalar('mass'))
 
-    # x = gr.vector('x', 3)
     a = gr.vector('a', 3)
     v = gr.time_antiderivative('v', a)
     x = gr.time_antiderivative('x', v)
 
     f = gr.mul('f', k, x)
     gr.mul('a', imass, 'f')
+    return gr
+
+
+def controlled_vectorspring():
+    gr = graph.OpGraph('VectorSpring')
+    k = gr.scalar('k')
+
+    imass = gr.inv('imass', gr.scalar('mass'))
+
+    u = gr.vector('u', 3)
+
+    a = gr.vector('a', 3)
+    v = gr.time_antiderivative('v', a)
+    x = gr.time_antiderivative('x', v)
+
+    force = gr.add('force', gr.mul(gr.anon(), k, x), u)
+    gr.mul('a', imass, force)
     return gr
 
 
@@ -53,5 +69,6 @@ all_graphs = [
     vectorspring(),
     simple_graph(),
     double_integrator(),
-    rotary_double_integrator()
+    rotary_double_integrator(),
+    controlled_vectorspring()
 ]
