@@ -120,19 +120,21 @@ class OpGraph(object):
     def __init__(self, name='OpGraph'):
         self._name = name
 
+        # The meat of the thing
         self._adj = {}
         self._properties = {}
 
+        # Functions
         self._functions = defaultdict(list)
+        self._subgraph_functions = defaultdict(list)
 
-        self._subgraph_functions = {}
-
+        # What we're optimizing
         self._to_optimize = set()
-        self._groups = defaultdict(tuple)
+
+        # A convenience for naming
         self._uniques = set()
 
         self._op_table = {}
-
         self._op_table['mul'] = self._mul()
         self._op_table['add'] = self._add()
         self._op_table['inv'] = self._inv()
@@ -153,6 +155,25 @@ class OpGraph(object):
     @property
     def to_optimize(self):
         return self._to_optimize
+
+    @property
+    def uniques(self):
+        return self._uniques
+
+    def mimic_graph(self, gr):
+        syms = set(self._adj.keys())
+        for sym in gr._to_optimize.intersection(syms):
+            self.optimize(sym)
+
+        for sym in gr._uniques.intersection(syms):
+            self._uniques.add(sym)
+
+    def subgraph_functions(self):
+        # yield self._subgraph_functions
+        for name, funcs in self._subgraph_functions.items():
+            for func in funcs:
+                yield (name, func)
+
 
     def groups(self):
         groups = []
@@ -296,12 +317,14 @@ class OpGraph(object):
     def extract_subgraph(self, sym, up_to=[]):
         grx = OpGraph('grx')
         grx.insert_subgraph(gr=self, sym=sym, up_to=up_to)
+        grx.mimic_graph(self)
         return grx
 
     def insert_subgraph_as_function(self, name, gr, output_sym, up_to=[], input_order=[]):
         grx = gr.extract_subgraph(output_sym, up_to=up_to)
         for inp in set(input_order) - set(grx.adj.keys()):
             grx.emplace(inp, gr.properties[inp])
+        grx.mimic_graph(gr)
         self.add_graph_as_function(name, grx, output_sym, input_order=input_order)
 
     def _inverse_adjacency(self):
@@ -373,6 +396,7 @@ class OpGraph(object):
         return False
 
     def emplace(self, name, properties):
+        self._needs_not(name)
         self._adj[name] = None
         self._properties[name] = properties
         return name
@@ -383,24 +407,16 @@ class OpGraph(object):
         return name
 
     def scalar(self, name):
-        self._adj[name] = None
-        self._properties[name] = create_scalar()
-        return name
+        return self.emplace(name, create_scalar())
 
     def vector(self, name, dim):
-        self._adj[name] = None
-        self._properties[name] = create_vector(dim)
-        return name
+        return self.emplace(name, create_vector(dim))
 
     def so3(self, name):
-        self._adj[name] = None
-        self._properties[name] = create_SO3()
-        return name
+        return self.emplace(name, create_SO3())
 
     def se3(self, name):
-        self._adj[name] = None
-        self._properties[name] = create_SE3()
-        return name
+        return self.emplace(name, create_SE3())
 
     def add_graph_as_function(self, name, graph, output_sym, input_order=[]):
         """Graph can't contain derivatives.
@@ -431,12 +447,12 @@ class OpGraph(object):
 
         args = tuple(args)
 
-        self._subgraph_functions[name] = {
+        self._subgraph_functions[name].append({
             'graph': graph,
             'returns': returns,
             'args': args,
             'input_names': tuple(input_map),
-        }
+        })
         self.add_function(name, returns, args)
         return input_map
 
