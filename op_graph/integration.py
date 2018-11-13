@@ -55,7 +55,7 @@ def insert_qdot_function(gr, rk4):
         statedot = graph.get_args(gr.adj[state])[0]
         qdot.append(statedot)
         q.append(state)
-    Qdot = gr.groupify('Qdot', qdot, inherent_type='State')
+    Qdot = gr.groupify('Qdot', qdot, inherent_type='StateDot')
     qdot_gr = gr.extract_subgraph(Qdot, up_to=q)
 
     for qq in q:
@@ -71,8 +71,9 @@ def insert_qdot_function(gr, rk4):
     U = qdot_gr.pregroup('U', u, inherent_type='Controls')
     Z = qdot_gr.pregroup('Z', z, inherent_type='Parameters')
 
+    qdot_gr.mimic_graph(gr)
     rk4.add_graph_as_function(
-        'qdot',
+        'compute_qdot',
         graph=qdot_gr,
         output_sym=Qdot,
         input_order=[Q, U, Z]
@@ -128,21 +129,25 @@ def rk4_integrate(gr):
     U = rk4.pregroup('U', u, inherent_type='Controls')
     Z = rk4.pregroup('Z', z, inherent_type='Parameters')
 
-    K1 = rk4.func('qdot', 'K1', Q, U, Z)
+    K1 = rk4.func('compute_qdot', 'K1', Q, U, Z)
 
     Q2 = rk4.add('Q2', Q, rk4.mul(rk4.anon(), HALF_H, K1))
-    K2 = rk4.func('qdot', 'K2', Q2, U, Z)
+    K2 = rk4.func('compute_qdot', 'K2', Q2, U, Z)
 
     Q3 = rk4.add('Q3', Q, rk4.mul(rk4.anon(), HALF_H, K2))
-    K3 = rk4.func('qdot', 'K3', Q3, U, Z)
+    K3 = rk4.func('compute_qdot', 'K3', Q3, U, Z)
 
     Q4 = rk4.add('Q4', Q, rk4.mul('Hk3', H, K3))
-    K4 = rk4.func('qdot', 'K4', Q4, U, Z)
+    K4 = rk4.func('compute_qdot', 'K4', Q4, U, Z)
 
     k1_and_k4 = rk4.add(rk4.anon(), K1, K4)
     k2_and_k3 = rk4.mul(rk4.anon(), TWO, rk4.add(rk4.anon(), K2, K3))
     Ksum = rk4.add(rk4.anon(), k1_and_k4, k2_and_k3)
+
     Qn = rk4.add('Qn', Q, rk4.mul(rk4.anon(), SIXTH, Ksum))
+
+    # print rk4.properties[Qn]
+    # exit()
 
     for opt in u:
         rk4.optimize(opt)
@@ -151,9 +156,14 @@ def rk4_integrate(gr):
 
 def test():
     import example_graphs
-    for gr in example_graphs.all_graphs:
-        rk4 = rk4_integrate(gr)
-        print rk4
+    # for gr in example_graphs.all_graphs:
+        # rk4 = rk4_integrate(gr)
+        # print rk4
+
+    gr = example_graphs.rotary_double_integrator()
+    # gr = example_graphs.controlled_vectorspring()
+    rk4 = rk4_integrate(gr)
+    print rk4
 
 
 if __name__ == '__main__':

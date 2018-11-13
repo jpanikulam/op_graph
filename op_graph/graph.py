@@ -835,7 +835,12 @@ class OpGraph(object):
             group = sym_prop['subtype']
             text = "{}[{}]".format(group, sym)
         elif sym_type == 'group':
-            text = "G[{}]".format(sym)
+            if sym_prop['inherent_type'] is not None:
+                gr_type = sym_prop['inherent_type']
+            else:
+                gr_type = "G"
+
+            text = "{}[{}]".format(gr_type, sym)
         else:
             assert False, "{} unknown".format(sym_type)
 
