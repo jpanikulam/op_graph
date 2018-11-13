@@ -162,6 +162,9 @@ class OpGraph(object):
                     groups.append(prop['elements'])
         return groups
 
+    def anon(self):
+        return self.unique("anon")
+
     def unique(self, prefix=None):
         import uuid
 
@@ -207,6 +210,10 @@ class OpGraph(object):
             return from_b
         else:
             return self._properties[from_b]
+
+    def _inherit_first(self, *args):
+        assert len(args)
+        return self._inherit(args[0])
 
     def _inherit_last(self, *args):
         assert len(args)
@@ -352,6 +359,9 @@ class OpGraph(object):
 
     def is_constant(self, name):
         if name in self._adj:
+            if self._adj[name] is None:
+                return False
+
             if self._adj[name][0] == 'identity':
                 args = get_args(self._adj[name])
                 return len(args) and not isinstance(args[0], str)
@@ -423,7 +433,6 @@ class OpGraph(object):
             'input_names': tuple(input_map),
         }
         self.add_function(name, returns, args)
-        self.add_function(name, returns, [create_group(args)])
         return input_map
 
     def add_function(self, f_name, returns, arguments):
@@ -609,8 +618,11 @@ class OpGraph(object):
             output = explicit_func['returns'](*elements)
             outputs.append(output)
 
-        if tuple(outputs) == group_args[-1]:
-            inherent_type = self._properties[args[-1]]['inherent_type']
+        # if tuple(outputs) == group_args[-1]:
+            # inherent_type = self._properties[args[-1]]['inherent_type']
+        if tuple(outputs) in group_args:
+            ind = group_args.index(tuple(outputs))
+            inherent_type = self._properties[args[ind]]['inherent_type']
         else:
             inherent_type = None
 
@@ -660,7 +672,7 @@ class OpGraph(object):
     def _add(self):
         return {
             ('liegroup', 'vector'): {
-                'returns': self._inherit_last,
+                'returns': self._inherit_first,
                 'needs': [self._needs_valid_derivative_type],
                 'generate': lambda n, a, b: self._call('mul', n, a, self._anony_call('exp', b))
             },
@@ -763,6 +775,8 @@ class OpGraph(object):
         """Generate the full composed sequence of operations that generates `sym`"""
         self._needs(sym)
         op = self._adj[sym]
+        if self.is_constant(sym):
+            return sym
 
         if op is not None:
             sub_ops = tuple(map(self.how_do_i_compute, op[1]))
@@ -782,6 +796,10 @@ class OpGraph(object):
         print spaces + ')'
 
     def to_text(self, sym):
+        if sym in self._uniques:
+            return "({})".format(self.op_to_text(self._adj[sym]))
+
+
         sym_type = self._type(sym)
         sym_prop = self._properties[sym]
 
@@ -838,6 +856,9 @@ class OpGraph(object):
 
             if op is None:
                 total_text += '-> {}\n'.format(self.to_text(sym))
+                continue
+
+            if sym in self._uniques:
                 continue
 
             text = self.op_to_text(op)
