@@ -402,7 +402,7 @@ class OpGraph(object):
             if self._adj[name] is None:
                 return False
 
-            if self._adj[name][0] == 'identity':
+            if self._adj[name][0] == 'I':
                 args = get_args(self._adj[name])
                 return len(args) and not isinstance(args[0], str)
         return False
@@ -414,7 +414,7 @@ class OpGraph(object):
         return name
 
     def constant_scalar(self, name, value):
-        self._adj[name] = self._op('identity', value)
+        self._adj[name] = self._op('I', value)
         self._properties[name] = create_scalar()
         return name
 
@@ -628,7 +628,7 @@ class OpGraph(object):
         return new_gr
 
     def _anony_call(self, op_name, *args):
-        return self._call(op_name, 'anon_' + self.unique(), *args)
+        return self._call(op_name, self.anon(), *args)
 
     def _call_group(self, op_name, new, *args):
         """Now, the trick is to represent "implicit graphs" that arise

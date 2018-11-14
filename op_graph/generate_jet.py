@@ -1,6 +1,7 @@
 from graph import OpGraph, create_scalar, create_vector
 import generate_dynamics as gd
 import graph_to_cc
+import integration
 
 
 def make_simple_jet():
@@ -28,7 +29,7 @@ def make_simple_jet():
 
     graph.vector('v', 3)
     graph.time_antiderivative('throttle_pct', 'throttle_dot')
-    graph.func('thrust', 'force_from_throttle', 'throttle_pct', 'v')
+    graph.func('force_from_throttle', 'thrust', 'throttle_pct', 'v')
 
     graph.vector('unit_z', 3)
     graph.mul('force_world', 'R_world_from_body', graph.mul('body_force', 'thrust', 'unit_z'))
@@ -47,10 +48,15 @@ def main():
 
     # graph_to_cc.express(jet_graph)
 
-    print jet_graph
+    # print jet_graph
 
-    gd.make_types(jet_graph)
-    gd.generate_dynamics(jet_graph)
+    # graph_to_cc.express(jet_graph)
+    rk4 = integration.rk4_integrate(jet_graph)
+    print rk4
+
+    graph_to_cc.express(rk4)
+    # gd.make_types(jet_graph)
+    # gd.generate_dynamics(jet_graph)
 
 
 if __name__ == '__main__':
