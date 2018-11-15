@@ -72,12 +72,15 @@ def create_liegroup(subtype):
     return default
 
 
-def create_group(element_properties, inherent_type=None):
+def create_group(element_properties, names, inherent_type=None):
     assert isinstance(element_properties, (list, tuple))
+    assert isinstance(names, (list, tuple))
+    assert len(names) == len(element_properties)
     return {
         'type': 'group',
         'elements': tuple(element_properties),
         'inherent_type': inherent_type,
+        'names': tuple(names)
     }
 
 
@@ -208,6 +211,13 @@ class OpGraph(object):
     #
     # Requirements
     #
+
+    def _default_list(self, default, otherwise):
+        self._needs_iter(default)
+        self._needs_iter(otherwise)
+        if len(otherwise) == 0:
+            return default
+        return otherwise
 
     def _type(self, name):
         self._needs(name)
@@ -349,38 +359,7 @@ class OpGraph(object):
     def get_depends_on(self, sym):
         return self._inverse_adjacency()[sym]
 
-    def _one_subs(self, was, should_be):
-        def replace(in_tuple, formerly, becomes):
-            assert in_tuple.count(formerly) > 0
-            # Cheating -- easy to improve
-            l_tuple = list(in_tuple)
-            while(l_tuple.count(formerly) > 0):
-                ind = l_tuple.index(formerly)
-                self._needs_same(l_tuple[ind], becomes)
-                l_tuple[ind] = becomes
-                return tuple(l_tuple)
-
-        self._needs(was)
-        self._needs(should_be)
-        need_to_change = self.get_depends_on(was)
-
-        # We're flying by the seat of our pants here hoping this is valid!
-        # We're just hoping the user doesn't change types
-        for target_sym in need_to_change:
-            former_op = self._adj[target_sym]
-            new_op_args = replace(get_args(former_op), was, should_be)
-            self._adj[target_sym] = (former_op[0], new_op_args)
-
-    def subs(self, replacement_dict):
-        """This must be adjusted so it doesn't overwrite its own work
-
-        Must be possible to swap in (see notebook)
-        NOT DONE"""
-        raise NotImplementedError("This function is not implemented, any more questions?")
-        for was, should_be in replacement_dict.items():
-            self._one_subs(was, should_be)
-
-    def pregroup(self, pregroup_name, syms=[], inherent_type=None):
+    def pregroup(self, pregroup_name, syms=[], names=[], inherent_type=None):
         self._needs_iter(syms)
         self._needs_inherent_type(inherent_type)
         props = []
@@ -388,7 +367,7 @@ class OpGraph(object):
             self._needs_input(sym)
             props.append(self._properties[sym])
 
-        group_prop = create_group(props, inherent_type=inherent_type)
+        group_prop = create_group(props, names=self._default_list(syms, names), inherent_type=inherent_type)
         self.emplace(pregroup_name, group_prop)
         self.degroupify(syms, pregroup_name)
         return pregroup_name
@@ -525,7 +504,7 @@ class OpGraph(object):
         self._properties[sym_new] = ret_type
         return sym_new
 
-    def groupify(self, group_sym, syms=[], inherent_type=None):
+    def groupify(self, group_sym, syms=[], names=[], inherent_type=None):
         """Creates a group."""
         # assert len(syms) > 0, "Not enough symbols!"
         self._needs_not(group_sym)
@@ -536,7 +515,7 @@ class OpGraph(object):
             self._needs(sym)
             properties.append(self._properties[sym])
 
-        group_properties = create_group(properties, inherent_type=inherent_type)
+        group_properties = create_group(properties, names=self._default_list(syms, names), inherent_type=inherent_type)
         self._adj[group_sym] = self._op('groupify', *syms)
         self._properties[group_sym] = group_properties
         return group_sym
@@ -653,15 +632,15 @@ class OpGraph(object):
             output = explicit_func['returns'](*elements)
             outputs.append(output)
 
-        # if tuple(outputs) == group_args[-1]:
-            # inherent_type = self._properties[args[-1]]['inherent_type']
+
+        inherent_type = None
+        field_names = []
         if tuple(outputs) in group_args:
             ind = group_args.index(tuple(outputs))
             inherent_type = self._properties[args[ind]]['inherent_type']
-        else:
-            inherent_type = None
+            field_names = self._properties[args[ind]]['names']
 
-        new_group = create_group(outputs, inherent_type)
+        new_group = create_group(outputs, names=field_names, inherent_type=inherent_type)
         self._adj[new] = self._op(op_name, *args)
         self._properties[new] = new_group
         return new

@@ -81,7 +81,9 @@ def extract(sym, gr):
     args = graph.get_args(op)
     assert isinstance(args[1], int), "Oh shit what are you doing"
     struct_name = args[0]
-    return "{}.{}".format(struct_name, sym)
+    ind = args[1]
+    field_name = gr.properties[struct_name]['names'][ind]
+    return "{}.{}".format(struct_name, field_name)
 
 
 def build_struct(sym, gr):
