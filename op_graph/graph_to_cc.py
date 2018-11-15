@@ -173,15 +173,16 @@ def express(gr):
 
 
     for sym in gr_sorted:
-        if gr.is_constant(sym):
-            continue
-
         if sym not in gr.adj.keys():
             continue
 
-        op = gr.adj[sym]
+        if gr.is_constant(sym):
+            continue
+
         if sym in gr.uniques:
             continue
+
+        op = gr.adj[sym]
 
         if op is not None:
             sym_prop = gr.properties[sym]
