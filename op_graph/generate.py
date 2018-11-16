@@ -57,7 +57,7 @@ class StructScope(Scope):
 def generate_struct(struct):
     with StructScope(struct['name']) as code:
         for member in struct['members']:
-            code.line(member['type'], member['name'])
+            code.line(member['type']['name'], member['name'])
     return code.code
 
 
@@ -86,11 +86,12 @@ def declare_struct(struct):
 
 
 def declare_func(func):
-    args_list = ['{} {}'.format(arg['type'], arg['name']) for arg in func['args']]
+    args_list = ['{} {}'.format(arg['type']['name'], arg['name']) for arg in func['args']]
+    assert func['kind'] == 'function'
 
     args = ",".join(args_list)
     return "{} {}({})".format(
-        func['returns']['type'],
+        func['returns']['name'],
         func['name'],
         args
     )

@@ -152,12 +152,19 @@ def rk4_integrate(gr):
 
     Qn = rk4.add('Qn', Q, rk4.mul(rk4.anon(), SIXTH, Ksum))
 
-    # print rk4.properties[Qn]
-    # exit()
-
     for opt in u:
         rk4.optimize(opt)
-    return rk4
+
+    rk4_meta = graph.OpGraph('RK4')
+    rk4_meta.mimic_graph(gr)
+    rk4_meta.add_graph_as_function(
+        'rk4_integrate',
+        graph=rk4,
+        output_sym=Qn,
+        input_order=[Q, U, Z, h]
+    )
+
+    return rk4_meta
 
 
 def test():

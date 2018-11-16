@@ -20,9 +20,25 @@ def to_cpp_type(properties):
     return choices[properties['type']]()
 
 
-def to_const_ref(my_type):
+def to_arg_ref(my_type):
     new_type = deepcopy(my_type)
-    new_type['type'] = "const {}&".format(my_type['type'])
+
+    primitives = [
+        "bool",
+        "char",
+        "short int",
+        "int",
+        "long",
+        "size_t",
+        "wchar_t",
+        "float",
+        "double",
+    ]
+
+    if my_type['type']['name'] in primitives:
+        return my_type
+
+    new_type['type']['name'] = "const {}&".format(my_type['type']['name'])
     return new_type
 
 
@@ -125,16 +141,14 @@ def sym_children_to_cc(sym, gr):
     return result
 
 
-def group_to_struct(gr, group_sym):
-    props = gr.properties[group_sym]
-    inherent_type = props['inherent_type']
+def group_to_struct(grp_props):
+    inherent_type = grp_props['inherent_type']
     assert inherent_type is not None
 
     lvalues = []
-    for _type, name in zip(props['elements'], names):
+    for _type, name in zip(grp_props['elements'], grp_props['names']):
         cc_type = to_cpp_type(_type)
         lvalues.append(create.create_lvalue(cc_type, name))
-
 
     mystruct = create.create_struct(
         inherent_type,
@@ -142,38 +156,11 @@ def group_to_struct(gr, group_sym):
     )
     return mystruct
 
-    cg = CodeGraph()
-    cg.add_child(mystruct)
 
-    # myfunc = create.create_function(
-    #     'perforate',
-    #     [
-    #         create.create_lvalue('double', 'goomba'),
-    #         create.create_lvalue('Fromp&', 'goomba2'),
-    #     ],
-    #     'double'
-    # )
-
-
-def express(gr):
-
-    # for group in
-
-    for name, subgraph in gr.subgraph_functions():
-        print name + "()"
-        express(subgraph['graph'])
-        print '----'
-
-    gr_sorted = graph_tools.topological_sort(gr.adj)
-    inputs = graph.get_inputs(gr)
+def graph_to_impl(gr, output):
     cb = generate.CodeBlock()
 
-    # structs = gr.groups()
-    # for struct in structs:
-        # nstruct = group_to_struct(gr, struct, )
-        # generate.generate_struct(nstruct)
-
-
+    gr_sorted = graph_tools.topological_sort(gr.adj)
     for sym in gr_sorted:
         if sym not in gr.adj.keys():
             continue
@@ -194,7 +181,51 @@ def express(gr):
             )
             cb.set(decl, sym_children_to_cc(sym, gr))
 
-    print cb
+    cb.line('return', output)
+
+    return cb
+
+
+def to_cc_function(func_name, graph_func):
+    gr = graph_func['graph']
+    for name, subgraph in gr.subgraph_functions():
+        print generate.generate(to_cc_function(name, subgraph))
+
+    impl = graph_to_impl(graph_func['graph'], graph_func['output_name'])
+    inputs = graph_func['input_names']
+
+    lvalues = []
+    types = map(gr.properties.get, inputs)
+
+    for _type, name in zip(types, inputs):
+        cc_type = to_cpp_type(_type)
+        lvalue = create.create_lvalue(cc_type, name)
+        lvalues.append(to_arg_ref(lvalue))
+
+    myfunc = create.create_function(
+        func_name,
+        lvalues,
+        create.create_type(to_cpp_type(graph_func['returns'])),
+        impl=impl
+    )
+    return myfunc
+
+
+def express(gr):
+
+    for name, subgraph in gr.subgraph_functions():
+        # express(subgraph['graph'])
+        print generate.generate(to_cc_function(name, subgraph))
+
+    # cc_func = create.create_function('dynamics', )
+
+    structs = gr.group_types
+    for struct in structs.values():
+        nstruct = group_to_struct(struct)
+        print generate.generate_struct(nstruct)
+
+    # fn = to_cc_function(gr)
+
 
 def test_graph():
     import example_graphs

@@ -150,6 +150,10 @@ class OpGraph(object):
             return partial(self._call, key)
 
     @property
+    def name(self):
+        return self._name
+
+    @property
     def adj(self):
         return self._adj
 
@@ -173,6 +177,9 @@ class OpGraph(object):
         for sym in gr._uniques.intersection(syms):
             self._uniques.add(sym)
 
+        self._subgraph_functions.update(gr._subgraph_functions)
+        self._functions.update(gr._functions)
+
         # TODO: Make sure this doesn't overwrite anything
         self._group_types.update(gr._group_types)
 
@@ -180,7 +187,6 @@ class OpGraph(object):
         for name, funcs in self._subgraph_functions.items():
             for func in funcs:
                 yield (name, func)
-
 
     def groups(self):
         groups = []
@@ -190,8 +196,17 @@ class OpGraph(object):
                     groups.append(prop['elements'])
         return groups
 
-    def register_group_type(self, name, field_names=[]):
-        self._group_types[name] = field_names
+    @property
+    def group_types(self):
+        return self._group_types
+
+    def register_group_type(self, name, field_names=[], field_properties=[]):
+        real_field_props = []
+        if len(field_properties) == 0:
+            for field_name in field_names:
+                self._needs(field_name)
+                real_field_props.append(self._properties[field_name])
+        self._group_types[name] = create_group(real_field_props, field_names, inherent_type=name)
 
     def anon(self):
         return self.unique("anon")
@@ -317,6 +332,9 @@ class OpGraph(object):
                 Log.warn("Copying subgraph, but a target: {} is not present ".format(sym))
                 assert False
 
+        if sym not in gr.adj:
+            return
+
         if sym in up_to:
             self._adj[sym] = None
             self._properties[sym] = gr.properties[sym]
@@ -334,6 +352,18 @@ class OpGraph(object):
     def insert_subgraph(self, gr, sym, up_to=[]):
         """This allows overriding existing symbols."""
         self._copy_subgraph(gr, sym, up_to=up_to, allow_override=True)
+
+    """
+    def extract_paths_to(self, sym):
+        grx = OpGraph("{}_to_{}".format(self._name, sym))
+        inv_adj = self._inverse_adjacency()
+        stack = [sym]
+
+        # while(len(stack) > 0):
+            # next_sym = stack.pop()
+            # for parent in inv_adj[next_sym]:
+                # stack.append(parent)
+            # grx._adj[next_sym] = gr.adj[next_sym]"""
 
     def extract_subgraph(self, sym, up_to=[]):
         grx = OpGraph('grx')
@@ -431,19 +461,22 @@ class OpGraph(object):
             if inp not in input_order:
                 real_input_order.append(inp)
 
+        simplified_graph = graph.extract_subgraph(output_sym)
         args = []
         input_map = []
         for inp in real_input_order:
             args.append(graph.properties[inp])
             input_map.append(inp)
+            simplified_graph.emplace(inp, graph.properties[inp])
 
         args = tuple(args)
 
         self._subgraph_functions[name].append({
-            'graph': graph,
+            'graph': simplified_graph,
             'returns': returns,
             'args': args,
             'input_names': tuple(input_map),
+            'output_name': output_sym
         })
         self.add_function(name, returns, args)
         return input_map
