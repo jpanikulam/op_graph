@@ -188,8 +188,6 @@ def graph_to_impl(gr, output):
 
 def to_cc_function(func_name, graph_func):
     gr = graph_func['graph']
-    for name, subgraph in gr.subgraph_functions():
-        print generate.generate(to_cc_function(name, subgraph))
 
     impl = graph_to_impl(graph_func['graph'], graph_func['output_name'])
     inputs = graph_func['input_names']
@@ -208,23 +206,18 @@ def to_cc_function(func_name, graph_func):
         create.create_type(to_cpp_type(graph_func['returns'])),
         impl=impl
     )
+
     return myfunc
 
 
 def express(gr):
-
-    for name, subgraph in gr.subgraph_functions():
-        # express(subgraph['graph'])
-        print generate.generate(to_cc_function(name, subgraph))
-
-    # cc_func = create.create_function('dynamics', )
-
     structs = gr.group_types
     for struct in structs.values():
         nstruct = group_to_struct(struct)
         print generate.generate_struct(nstruct)
 
-    # fn = to_cc_function(gr)
+    for name, subgraph in gr.subgraph_functions():
+        print generate.generate(to_cc_function(name, subgraph))
 
 
 def test_graph():
