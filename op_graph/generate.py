@@ -24,7 +24,7 @@ class CodeBlock(object):
         self.line(*out)
 
     def write(self, text):
-        self.code += text
+        self.code += str(text)
 
     def comment(self, text):
         for line in text.split('\n'):
@@ -78,7 +78,7 @@ def generate(thing):
         'function': generate_func,
     }
     dispatch = generation_dispatch[thing['kind']]
-    return dispatch(thing)
+    return clang_fmt(dispatch(thing))
 
 
 def declare_struct(struct):

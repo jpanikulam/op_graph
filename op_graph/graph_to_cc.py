@@ -54,10 +54,8 @@ def illegal(sym_name):
             return True
     if sym_name[0].isdigit():
         return True
-
     if sym_name[0] in ['_']:
         return True
-
     return False
 
 
@@ -214,7 +212,7 @@ def express(gr):
     structs = gr.group_types
     for struct in structs.values():
         nstruct = group_to_struct(struct)
-        print generate.generate_struct(nstruct)
+        print generate.generate(nstruct)
 
     for name, subgraph in gr.subgraph_functions():
         print generate.generate(to_cc_function(name, subgraph))
