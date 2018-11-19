@@ -201,6 +201,8 @@ class OpGraph(object):
         return self._group_types
 
     def register_group_type(self, name, field_names=[], field_properties=[]):
+        self._needs_all_unique(field_names)
+
         real_field_props = []
         if len(field_properties) == 0:
             for field_name in field_names:
@@ -281,6 +283,9 @@ class OpGraph(object):
             self._properties[a],
             self._properties[b]
         )
+
+    def _needs_all_unique(self, syms):
+        assert len(set(syms)) == len(syms), "All of {} must be unique".format(syms)
 
     def _needs_properties(self, a, properties):
         assert self._properties[a] == properties
@@ -396,6 +401,8 @@ class OpGraph(object):
     def pregroup(self, pregroup_name, syms=[], names=[], inherent_type=None):
         self._needs_iter(syms)
         self._needs_inherent_type(inherent_type)
+        self._needs_all_unique(syms)
+        self._needs_all_unique(names)
         props = []
         for sym in syms:
             self._needs_input(sym)
@@ -545,6 +552,8 @@ class OpGraph(object):
         """Creates a group."""
         self._needs_not(group_sym)
         self._needs_inherent_type(inherent_type)
+        self._needs_all_unique(syms)
+        self._needs_all_unique(names)
 
         properties = []
         for sym in syms:
@@ -647,38 +656,55 @@ class OpGraph(object):
         return self._call(op_name, self.anon(), *args)
 
     def _generate_group_func(self, op_name, output_group, *args):
+        def broadcast_properties_lat(n, field):
+            subthings = []
+            for arg in args:
+                if self._type(arg) == 'group':
+                    subthings.append(self._properties[arg][field][n])
+                else:
+                    subthings.append(self._properties[arg])
+            return subthings
+
+        def broadcast_properties_lon(arg, field, nargs):
+            subthings = []
+            if self._type(arg) == 'group':
+                subthings = self._properties[arg][field]
+            else:
+                subthings = [self._properties[arg]] * nargs
+            return tuple(subthings)
+
         gr = OpGraph()
         gr.mimic_graph(self)
 
+        n_args = None
         for arg in args:
             gr.emplace(arg, self._properties[arg])
+            if (n_args is not None) and (self._type(arg) == 'group'):
+                assert len(self._properties[arg]['elements']) == n_args
+            if self._type(arg) == 'group':
+                n_args = len(self._properties[arg]['elements'])
 
         outputs = []
-        num_group_members = len(self._properties[args[0]]['elements'])
-        already_created = set()
-        for n in range(num_group_members):
-            element_names = map(lambda o: self._properties[o]['names'][n], args)
-            properties = map(lambda o: self._properties[o]['elements'][n], args)
+        for n in range(n_args):
+            properties = broadcast_properties_lat(n, 'elements')
             extracted = []
 
-            for k, (element, prop) in enumerate(zip(element_names, properties)):
-                if element in already_created:
-                    Log.warn("Repeated element name {} in {}".format(element, args[k]))
-                    extracted.append(element)
-                    continue
+            for k, prop in enumerate(properties):
+                if self._type(args[k]) == 'group':
+                    element_name = self._properties[args[k]]['names'][n]
+                    extracted.append(gr.extract(gr.anon(), args[k], n))
                 else:
-                    already_created.add(element)
-                extracted.append(gr.extract(element, args[k], n))
+                    element_name = args[k]
+                    extracted.append(element_name)
 
             new = gr._call(op_name, self.anon(), *extracted)
             outputs.append(new)
 
         output_props = map(gr.properties.get, outputs)
-        group_props = list(map(lambda o: gr.properties[o]['elements'], args))
+        group_props = map(lambda o: broadcast_properties_lon(o, 'elements', n_args), args)
 
         inherent_type = None
         field_names = []
-
         if tuple(output_props) in group_props:
             ind = group_props.index(tuple(output_props))
             inherent_type = gr._properties[args[ind]]['inherent_type']
@@ -702,32 +728,6 @@ class OpGraph(object):
             - How do you traverse a graph with a group?
                 - Should it be handled for you??
         """
-        for arg in args:
-            assert self._type(arg) == 'group'
-        '''
-        op_def = self._op_table[op_name]
-        group_args = map(lambda o: self._properties[o]['elements'], args)
-
-        outputs = []
-        for elements in zip(*group_args):
-            types = tuple(map(lambda o: o['type'], elements))
-            assert types in op_def.keys(), "Unknown {} for arguments {}".format(op_name, types)
-            explicit_func = op_def[types]
-            output = explicit_func['returns'](*elements)
-            outputs.append(output)
-
-        inherent_type = None
-        field_names = []
-        if tuple(outputs) in group_args:
-            ind = group_args.index(tuple(outputs))
-            inherent_type = self._properties[args[ind]]['inherent_type']
-            field_names = self._properties[args[ind]]['names']
-
-        new_group = create_group(outputs, names=field_names, inherent_type=inherent_type)
-        self._adj[new] = self._op(op_name, *args)
-        self._properties[new] = new_group
-        '''
-
         new_group_props = self._maybe_generate_group_func(op_name, new, *args)
 
         self._adj[new] = self._op(op_name, *args)
