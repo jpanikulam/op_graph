@@ -90,6 +90,12 @@ def func(sym, gr):
     return "{}({})".format(op[0], ', '.join(map(partial(sym_to_text, gr=gr), args)))
 
 
+def exp(sym, gr):
+    args = graph.get_args(gr.adj[sym])
+    result_type = gr.properties[sym]['subtype']
+    return "{}::exp({})".format(result_type, sym_to_text(args[0], gr=gr))
+
+
 def extract(sym, gr):
     op = gr.adj[sym]
     args = graph.get_args(op)
@@ -122,16 +128,21 @@ def inv(sym, gr):
         return "(1.0 / {})".format(sym_to_text(args[0], gr))
 
 
+def identity(sym, gr):
+    args = graph.get_args(gr.adj[sym])
+    return sym_to_text(args[0], gr)
+
+
 def sym_children_to_cc(sym, gr):
     dispatch = {
         'add': partial(binary, operator='+'),
         'mul': partial(binary, operator='*'),
-        'exp': func,
+        'exp': exp,
         'log': func,
         'groupify': build_struct,
         'extract': extract,
         'inv': inv,
-        'I': lambda sym, gr: graph.get_args(gr.adj[sym])[0],
+        'I': identity,
     }
 
     op = gr.adj[sym]
@@ -163,8 +174,9 @@ def graph_to_impl(gr, output):
         if sym not in gr.adj.keys():
             continue
 
-        if gr.is_constant(sym):
-            continue
+        # if gr.is_constant(sym):
+            # print 'CONSTANT'
+            # continue
 
         if sym in gr.uniques:
             continue
