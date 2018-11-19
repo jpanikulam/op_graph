@@ -198,8 +198,16 @@ def to_cc_function(func_name, graph_func):
         lvalue = create.create_lvalue(cc_type, name)
         lvalues.append(to_arg_ref(lvalue))
 
+    fname_map = {
+        'mul': "operator*",
+        'add': "operator+",
+        'sub': "operator-",
+    }
+
+    adapted_func_name = fname_map.get(func_name, func_name)
+
     myfunc = create.create_function(
-        func_name,
+        adapted_func_name,
         lvalues,
         create.create_type(to_cpp_type(graph_func['returns'])),
         impl=impl
@@ -221,8 +229,8 @@ def express(gr):
 def test_graph():
     import example_graphs
     # gr = example_graphs.double_integrator()
-    # gr = example_graphs.simple_graph()
-    gr = example_graphs.rotary_double_integrator()
+    gr = example_graphs.simple_graph()
+    # gr = example_graphs.rotary_double_integrator()
     # gr = example_graphs.controlled_vectorspring()
 
     return gr
