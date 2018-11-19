@@ -1,5 +1,4 @@
 from graph import OpGraph, create_scalar, create_vector
-# import generate_dynamics as gd
 import graph_to_cc
 import integration
 
@@ -46,11 +45,6 @@ def make_simple_jet():
 def main():
     jet_graph = make_simple_jet()
 
-    # graph_to_cc.express(jet_graph)
-
-    # print jet_graph
-
-    # graph_to_cc.express(jet_graph)
     rk4 = integration.rk4_integrate(jet_graph)
 
     graph_to_cc.express(rk4)
