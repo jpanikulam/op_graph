@@ -122,14 +122,8 @@ def rk4_integrate(gr):
     half = rk4.constant_scalar('half', 0.5)
     sixth = rk4.constant_scalar('sixth', 1.0 / 6.0)
     two = rk4.constant_scalar('two', 2.0)
-    SIXTH = rk4.groupify('SIXTH', [sixth] * len(q), inherent_type='State')
-    TWO = rk4.groupify('TWO', [two] * len(q), inherent_type='State')
-
     h = rk4.scalar('h')
     half_h = rk4.mul('half_h', 'h', half)
-
-    HALF_H = rk4.groupify('HALF_H', [half_h] * len(q), inherent_type='State')
-    H = rk4.groupify('H', [h] * len(q), inherent_type='State')
 
     Q = rk4.pregroup('Q', q, inherent_type='State')
     U = rk4.pregroup('U', u, inherent_type='Controls')
@@ -137,20 +131,20 @@ def rk4_integrate(gr):
 
     K1 = rk4.func('compute_qdot', 'K1', Q, U, Z)
 
-    Q2 = rk4.add('Q2', Q, rk4.mul(rk4.anon(), HALF_H, K1))
+    Q2 = rk4.add('Q2', Q, rk4.mul(rk4.anon(), half_h, K1))
     K2 = rk4.func('compute_qdot', 'K2', Q2, U, Z)
 
-    Q3 = rk4.add('Q3', Q, rk4.mul(rk4.anon(), HALF_H, K2))
+    Q3 = rk4.add('Q3', Q, rk4.mul(rk4.anon(), half_h, K2))
     K3 = rk4.func('compute_qdot', 'K3', Q3, U, Z)
 
-    Q4 = rk4.add('Q4', Q, rk4.mul(rk4.anon(), H, K3))
+    Q4 = rk4.add('Q4', Q, rk4.mul(rk4.anon(), h, K3))
     K4 = rk4.func('compute_qdot', 'K4', Q4, U, Z)
 
     k1_and_k4 = rk4.add(rk4.anon(), K1, K4)
-    k2_and_k3 = rk4.mul(rk4.anon(), TWO, rk4.add(rk4.anon(), K2, K3))
+    k2_and_k3 = rk4.mul(rk4.anon(), two, rk4.add(rk4.anon(), K2, K3))
     Ksum = rk4.add(rk4.anon(), k1_and_k4, k2_and_k3)
 
-    Qn = rk4.add('Qn', Q, rk4.mul(rk4.anon(), SIXTH, Ksum))
+    Qn = rk4.add('Qn', Q, rk4.mul(rk4.anon(), sixth, Ksum))
 
     for opt in u:
         rk4.optimize(opt)
