@@ -297,6 +297,22 @@ class OpGraph(object):
     def _needs_valid_liegroup(self, kind):
         assert kind in self._valid_liegroups
 
+    def _signature_exists(self, name, arguments):
+        if name not in self._subgraph_functions.keys():
+            return False
+        arg_props = tuple(map(self.properties.get, arguments))
+        for func in self._subgraph_functions[name]:
+            if arg_props == func['args']:
+                return True
+        else:
+            return False
+
+    def func_for_signature(self, name, arguments):
+        assert self._signature_exists(name, arguments)
+        for func in self._subgraph_functions[name]:
+            if arguments == func['args']:
+                return func
+
     def derivative_type(self, sym):
         sym_prop = self._properties[sym]
 
@@ -352,18 +368,6 @@ class OpGraph(object):
     def insert_subgraph(self, gr, sym, up_to=[]):
         """This allows overriding existing symbols."""
         self._copy_subgraph(gr, sym, up_to=up_to, allow_override=True)
-
-    """
-    def extract_paths_to(self, sym):
-        grx = OpGraph("{}_to_{}".format(self._name, sym))
-        inv_adj = self._inverse_adjacency()
-        stack = [sym]
-
-        # while(len(stack) > 0):
-            # next_sym = stack.pop()
-            # for parent in inv_adj[next_sym]:
-                # stack.append(parent)
-            # grx._adj[next_sym] = gr.adj[next_sym]"""
 
     def extract_subgraph(self, sym, up_to=[]):
         grx = OpGraph('grx')
@@ -539,7 +543,6 @@ class OpGraph(object):
 
     def groupify(self, group_sym, syms=[], names=[], inherent_type=None):
         """Creates a group."""
-        # assert len(syms) > 0, "Not enough symbols!"
         self._needs_not(group_sym)
         self._needs_inherent_type(inherent_type)
 
@@ -548,6 +551,9 @@ class OpGraph(object):
             self._needs(sym)
             properties.append(self._properties[sym])
 
+        if inherent_type in self._group_types:
+            names = self._group_types[inherent_type]['names']
+
         group_properties = create_group(properties, names=self._default_list(syms, names), inherent_type=inherent_type)
         self._adj[group_sym] = self._op('groupify', *syms)
         self._properties[group_sym] = group_properties
@@ -555,7 +561,6 @@ class OpGraph(object):
 
     def extend_group(self, new_group_sym, old_group_sym, new_syms=[]):
         self._needs_not(new_group_sym)
-        # assert len(new_syms) > 0, "Not enough symbols"
         new_properties = []
         old_properties = self._properties[old_group_sym]['elements']
         new_properties.extend(old_properties)
@@ -610,7 +615,6 @@ class OpGraph(object):
                 new_sym = self.unique(prefix=sym + "{}".format(n))
                 expanded[sym].append(new_sym)
                 into_gr.emplace(new_sym, sub_property)
-
                 self.sym_expand(into_gr, sym, expanded)
 
         if op[0] in ('groupify', 'combine_groups', 'extract'):
@@ -642,6 +646,53 @@ class OpGraph(object):
     def _anony_call(self, op_name, *args):
         return self._call(op_name, self.anon(), *args)
 
+    def _generate_group_func(self, op_name, output_group, *args):
+        gr = OpGraph()
+        gr.mimic_graph(self)
+
+        for arg in args:
+            gr.emplace(arg, self._properties[arg])
+
+        outputs = []
+        num_group_members = len(self._properties[args[0]]['elements'])
+        already_created = set()
+        for n in range(num_group_members):
+            element_names = map(lambda o: self._properties[o]['names'][n], args)
+            properties = map(lambda o: self._properties[o]['elements'][n], args)
+            extracted = []
+
+            for k, (element, prop) in enumerate(zip(element_names, properties)):
+                if element in already_created:
+                    Log.warn("Repeated element name {} in {}".format(element, args[k]))
+                    extracted.append(element)
+                    continue
+                else:
+                    already_created.add(element)
+                extracted.append(gr.extract(element, args[k], n))
+
+            new = gr._call(op_name, self.anon(), *extracted)
+            outputs.append(new)
+
+        output_props = map(gr.properties.get, outputs)
+        group_props = list(map(lambda o: gr.properties[o]['elements'], args))
+
+        inherent_type = None
+        field_names = []
+
+        if tuple(output_props) in group_props:
+            ind = group_props.index(tuple(output_props))
+            inherent_type = gr._properties[args[ind]]['inherent_type']
+            field_names = gr._properties[args[ind]]['names']
+
+        gr.groupify(output_group, outputs, names=field_names, inherent_type=inherent_type)
+
+        if not self._signature_exists(op_name, args):
+            self.add_graph_as_function(op_name, gr, output_group, input_order=args)
+        return gr._properties[output_group]
+
+    def _maybe_generate_group_func(self, op_name, output_group, *args):
+        return self._generate_group_func(op_name, output_group, *args)
+
     def _call_group(self, op_name, new, *args):
         """Now, the trick is to represent "implicit graphs" that arise
         from groups.
@@ -653,7 +704,7 @@ class OpGraph(object):
         """
         for arg in args:
             assert self._type(arg) == 'group'
-
+        '''
         op_def = self._op_table[op_name]
         group_args = map(lambda o: self._properties[o]['elements'], args)
 
@@ -665,7 +716,6 @@ class OpGraph(object):
             output = explicit_func['returns'](*elements)
             outputs.append(output)
 
-
         inherent_type = None
         field_names = []
         if tuple(outputs) in group_args:
@@ -676,6 +726,13 @@ class OpGraph(object):
         new_group = create_group(outputs, names=field_names, inherent_type=inherent_type)
         self._adj[new] = self._op(op_name, *args)
         self._properties[new] = new_group
+        '''
+
+        new_group_props = self._maybe_generate_group_func(op_name, new, *args)
+
+        self._adj[new] = self._op(op_name, *args)
+        self._properties[new] = new_group_props
+
         return new
 
     def _call(self, op_name, new, *args):
@@ -690,7 +747,7 @@ class OpGraph(object):
 
         types = tuple(map(lambda o: self._type(o), args))
 
-        assert types in op_def.keys(), "Signature unknown: {}".format(types)
+        assert types in op_def.keys(), "Signature unknown: {} for {}".format(types, op_name)
         real_func = op_def[types]
         self._needs_not(new)
 
@@ -721,7 +778,7 @@ class OpGraph(object):
             ('liegroup', 'vector'): {
                 'returns': self._inherit_first,
                 'needs': [self._needs_valid_derivative_type],
-                'generate': lambda n, a, b: self._call('mul', n, a, self._anony_call('exp', b))
+                'generate': lambda n, a, b: self._call('mul', n, self._anony_call('exp', b), a)
             },
             ('vector', 'vector'): {
                 'returns': self._inherit_last,
@@ -762,7 +819,7 @@ class OpGraph(object):
                 'needs': []
             },
             ('scalar',): {
-                'returns': lambda a: 'scalar',
+                'returns': lambda a: create_scalar(),
                 'needs': []
             }
         }
@@ -845,7 +902,6 @@ class OpGraph(object):
     def to_text(self, sym):
         if sym in self._uniques:
             return "({})".format(self.op_to_text(self._adj[sym]))
-
 
         sym_type = self._type(sym)
         sym_prop = self._properties[sym]
