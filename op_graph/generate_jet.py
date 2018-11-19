@@ -6,21 +6,22 @@ import integration
 def make_simple_jet():
     graph = OpGraph()
 
-    graph.scalar('density')
-    # Unoptimized
     graph.scalar('mass')
+    graph.scalar('temperature')
 
     graph.so3('R_world_from_body')
     graph.optimize(graph.vector('q', 3))
     graph.time_antiderivative('w', 'q')
     graph.time_antiderivative('R_world_from_body', 'w')
 
+    # Register a function that someone will implement in C++
     graph.add_function(
         'force_from_throttle',
         returns=create_scalar(),
         arguments=(
-            create_scalar(),
-            create_vector(3),
+            create_scalar(),   # Throttle
+            create_scalar(),   # Temperature
+            create_vector(3),  # Airspeed (Just to throw a vector in)
         )
     )
 
@@ -28,7 +29,7 @@ def make_simple_jet():
 
     graph.vector('v', 3)
     graph.time_antiderivative('throttle_pct', 'throttle_dot')
-    graph.func('force_from_throttle', 'thrust', 'throttle_pct', 'v')
+    graph.func('force_from_throttle', 'thrust', 'throttle_pct', 'temperature', 'v')
 
     graph.vector('unit_z', 3)
     graph.mul('force_world', 'R_world_from_body', graph.mul('body_force', 'thrust', 'unit_z'))
@@ -38,7 +39,7 @@ def make_simple_jet():
     graph.time_antiderivative('v', 'a')
     graph.time_antiderivative('x', 'v')
 
-    graph.warnings()
+    # graph.warnings()
     return graph
 
 
