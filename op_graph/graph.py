@@ -655,61 +655,83 @@ class OpGraph(object):
     def _anony_call(self, op_name, *args):
         return self._call(op_name, self.anon(), *args)
 
-    def _generate_group_func(self, op_name, output_group, *args):
-        def broadcast_properties_lat(n, field):
-            subthings = []
-            for arg in args:
-                if self._type(arg) == 'group':
-                    subthings.append(self._properties[arg][field][n])
-                else:
-                    subthings.append(self._properties[arg])
-            return subthings
-
-        def broadcast_properties_lon(arg, field, nargs):
-            subthings = []
+    def _broadcast_properties_lat(self, args, n, field):
+        subthings = []
+        for arg in args:
             if self._type(arg) == 'group':
-                subthings = self._properties[arg][field]
+                subthings.append(self._properties[arg][field][n])
             else:
-                subthings = [self._properties[arg]] * nargs
-            return tuple(subthings)
+                subthings.append(self._properties[arg])
+        return subthings
 
-        gr = OpGraph()
-        gr.mimic_graph(self)
+    def _broadcast_properties_lon(self, arg, field, nargs):
+        subthings = []
+        if self._type(arg) == 'group':
+            subthings = self._properties[arg][field]
+        else:
+            subthings = [self._properties[arg]] * nargs
+        return tuple(subthings)
 
+    def _count_args_broadcasteed(self, args):
         n_args = None
         for arg in args:
-            gr.emplace(arg, self._properties[arg])
             if (n_args is not None) and (self._type(arg) == 'group'):
                 assert len(self._properties[arg]['elements']) == n_args
             if self._type(arg) == 'group':
                 n_args = len(self._properties[arg]['elements'])
 
-        outputs = []
-        for n in range(n_args):
-            properties = broadcast_properties_lat(n, 'elements')
-            extracted = []
+        assert n_args is not None
+        return n_args
 
-            for k, prop in enumerate(properties):
-                if self._type(args[k]) == 'group':
-                    element_name = self._properties[args[k]]['names'][n]
-                    extracted.append(gr.extract(gr.anon(), args[k], n))
-                else:
-                    element_name = args[k]
-                    extracted.append(element_name)
-
-            new = gr._call(op_name, self.anon(), *extracted)
-            outputs.append(new)
-
-        output_props = map(gr.properties.get, outputs)
-        group_props = map(lambda o: broadcast_properties_lon(o, 'elements', n_args), args)
+    def _infer_output_group_type(self, outputs, args):
+        n_args = self._count_args_broadcasteed(args)
+        output_props = map(self.properties.get, outputs)
+        # This probably shouldn't allow a broadcasted non-group to count
+        group_props = map(lambda o: self._broadcast_properties_lon(o, 'elements', n_args), args)
 
         inherent_type = None
         field_names = []
         if tuple(output_props) in group_props:
             ind = group_props.index(tuple(output_props))
-            inherent_type = gr._properties[args[ind]]['inherent_type']
-            field_names = gr._properties[args[ind]]['names']
+            inherent_type = self._properties[args[ind]]['inherent_type']
+            field_names = self._properties[args[ind]]['names']
 
+        return field_names, inherent_type
+
+    def _generate_group_func(self, op_name, output_group, *args):
+        """Do broadcasted operations.
+
+        If every element of args is a group, this just:
+            1. Verifies that an operation exists, op(arg[k][...]) -> X
+            2. Creates a function that returns [X] for all k
+
+        If not every element is a group, it repeats the non-group elements and verifies
+        that the above operation still exists.
+        """
+        gr = OpGraph()
+        gr.mimic_graph(self)
+
+        for arg in args:
+            gr.emplace(arg, self._properties[arg])
+        n_args = self._count_args_broadcasteed(args)
+
+        outputs = []
+        for n in range(n_args):
+            properties = self._broadcast_properties_lat(args, n, 'elements')
+            op_arguments = []
+            for k, prop in enumerate(properties):
+                if self._type(args[k]) == 'group':
+                    element_name = self._properties[args[k]]['names'][n]
+                    op_arguments.append(gr.extract(gr.anon(), args[k], n))
+                else:
+                    # "Broadcast" if it's not a group
+                    element_name = args[k]
+                    op_arguments.append(element_name)
+
+            new = gr._call(op_name, gr.anon(), *op_arguments)
+            outputs.append(new)
+
+        field_names, inherent_type = gr._infer_output_group_type(outputs, args)
         gr.groupify(output_group, outputs, names=field_names, inherent_type=inherent_type)
 
         if not self._signature_exists(op_name, args):
@@ -720,13 +742,11 @@ class OpGraph(object):
         return self._generate_group_func(op_name, output_group, *args)
 
     def _call_group(self, op_name, new, *args):
-        """Now, the trick is to represent "implicit graphs" that arise
-        from groups.
+        """Call a function on a group.
 
-        Unanswered Questions:
-            - What does SO3(R) + x[3] look like, as groups?
-            - How do you traverse a graph with a group?
-                - Should it be handled for you??
+        TODO:
+            - Eliminate _maybe_generate_group_func
+            - Eliminate normal _call (I think this can contain it!)
         """
         new_group_props = self._maybe_generate_group_func(op_name, new, *args)
 
