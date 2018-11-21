@@ -20,7 +20,7 @@ def controlled_vectorspring():
     gr = graph.OpGraph('VectorSpring')
     k = gr.scalar('k')
 
-    imass = gr.inv('imass', gr.scalar('mass'))
+    imass = gr.inv(gr.anon(), gr.scalar('mass'))
 
     u = gr.vector('u', 3)
 

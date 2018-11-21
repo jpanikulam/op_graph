@@ -57,7 +57,11 @@ def create_matrix(dim):
     return prop
 
 
+VALID_LIEGROUPS = []
+
+
 def create_liegroup(subtype):
+    VALID_LIEGROUPS.append(subtype)
     mapping = {
         'SO3': {'dim': 3, 'algebra_dim': 3},
         'SE3': {'dim': 3, 'algebra_dim': 6},
@@ -115,11 +119,6 @@ def get_parameters(gr):
 
 
 class OpGraph(object):
-    _valid_liegroups = [
-        'SO3',
-        'SE3',
-    ]
-
     def __init__(self, name='OpGraph'):
         self._name = name
 
@@ -302,7 +301,7 @@ class OpGraph(object):
             assert self._type(a) == sym_types
 
     def _needs_valid_liegroup(self, kind):
-        assert kind in self._valid_liegroups
+        assert kind in VALID_LIEGROUPS
 
     def _signature_exists(self, name, arguments):
         if name not in self._subgraph_functions.keys():
