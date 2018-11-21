@@ -170,6 +170,14 @@ class OpGraph(object):
     def uniques(self):
         return self._uniques
 
+    def _copy_types(self, gr):
+        # TODO: Make sure this doesn't overwrite anything
+        self._group_types.update(gr._group_types)
+
+    def _copy_functions(self, gr):
+        self._subgraph_functions.update(gr._subgraph_functions)
+        self._functions.update(gr._functions)
+
     def mimic_graph(self, gr):
         syms = set(self._adj.keys())
         for sym in gr._to_optimize.intersection(syms):
@@ -178,11 +186,8 @@ class OpGraph(object):
         for sym in gr._uniques.intersection(syms):
             self._uniques.add(sym)
 
-        self._subgraph_functions.update(gr._subgraph_functions)
-        self._functions.update(gr._functions)
-
-        # TODO: Make sure this doesn't overwrite anything
-        self._group_types.update(gr._group_types)
+        # Don't always copy functions!
+        self._copy_types(gr)
 
     def subgraph_functions(self):
         for name, funcs in self._subgraph_functions.items():
@@ -379,13 +384,15 @@ class OpGraph(object):
         grx = OpGraph('grx')
         grx.insert_subgraph(gr=self, sym=sym, up_to=up_to)
         grx.mimic_graph(self)
+        grx._copy_functions(self)
         return grx
 
     def insert_subgraph_as_function(self, name, gr, output_sym, up_to=[], input_order=[]):
         grx = gr.extract_subgraph(output_sym, up_to=up_to)
         for inp in set(input_order) - set(grx.adj.keys()):
             grx.emplace(inp, gr.properties[inp])
-        grx.mimic_graph(gr)
+        # grx.mimic_graph(gr)
+        grx._copy_functions(gr)
         self.add_graph_as_function(name, grx, output_sym, input_order=input_order)
 
     def _inverse_adjacency(self):
@@ -396,10 +403,18 @@ class OpGraph(object):
                 inv_adjacency[arg].append(sym)
         return inv_adjacency
 
-    def get_depends_on(self, sym):
+    def what_depends_on(self, sym):
+        """Find out what depends on sym.
+
+        Warning: Constructs the full inverse adjacency on each call.
+        """
         return self._inverse_adjacency()[sym]
 
     def pregroup(self, pregroup_name, syms=[], names=[], inherent_type=None):
+        """Group input symbols.
+
+        This is often a convenient operation to apply when creating functions.
+        """
         self._needs_iter(syms)
         self._needs_inherent_type(inherent_type)
         self._needs_all_unique(syms)
@@ -458,7 +473,7 @@ class OpGraph(object):
             One idea is to make groups *themeselves* symbols in a style like hcat
         """
         self._needs_iter(input_order)
-        self.mimic_graph(graph)
+        self._copy_types(graph)
 
         returns = graph.properties[output_sym]
         graph._needs(output_sym)
@@ -514,7 +529,7 @@ class OpGraph(object):
         return f_name
 
     #
-    # Operations
+    # Operations (Definition of operations)
     #
 
     def _op(self, name, *args):
@@ -531,12 +546,11 @@ class OpGraph(object):
                 explicit_func = function
                 break
         else:
-            Log.warn("No valid function for: {}()".format(
-                func))
-            Log.warn(pprint.pformat(arg_props, width=50))
+            Log.warn("No valid function for: {}()".format(func))
+            Log.warn(arg_props)
             Log.info("Possible examples: ")
             for function in overloaded_funcs:
-                Log.success(pprint.pformat(function['args'], width=50), '\n')
+                Log.success(function['args'])
             raise KeyError("No valid function.")
 
         for supplied_arg, expected_property in zip(args, explicit_func['args']):
@@ -548,6 +562,10 @@ class OpGraph(object):
         ret_type = explicit_func['returns']
         self._properties[sym_new] = ret_type
         return sym_new
+
+    #
+    # Operations (Actual operations)
+    #
 
     def groupify(self, group_sym, syms=[], names=[], inherent_type=None):
         """Creates a group."""
@@ -670,10 +688,10 @@ class OpGraph(object):
         if self._type(arg) == 'group':
             subthings = self._properties[arg][field]
         else:
-            subthings = [self._properties[arg]] * nargs
+            return tuple()
         return tuple(subthings)
 
-    def _count_args_broadcasteed(self, args):
+    def _count_args_broadcasted(self, args):
         n_args = None
         for arg in args:
             if (n_args is not None) and (self._type(arg) == 'group'):
@@ -685,9 +703,8 @@ class OpGraph(object):
         return n_args
 
     def _infer_output_group_type(self, outputs, args):
-        n_args = self._count_args_broadcasteed(args)
+        n_args = self._count_args_broadcasted(args)
         output_props = map(self.properties.get, outputs)
-        # This probably shouldn't allow a broadcasted non-group to count
         group_props = map(lambda o: self._broadcast_properties_lon(o, 'elements', n_args), args)
 
         inherent_type = None
@@ -714,7 +731,7 @@ class OpGraph(object):
 
         for arg in args:
             gr.emplace(arg, self._properties[arg])
-        n_args = self._count_args_broadcasteed(args)
+        n_args = self._count_args_broadcasted(args)
 
         outputs = []
         for n in range(n_args):
@@ -739,9 +756,6 @@ class OpGraph(object):
             self.add_graph_as_function(op_name, gr, output_group, input_order=args)
         return gr._properties[output_group]
 
-    def _maybe_generate_group_func(self, op_name, output_group, *args):
-        return self._generate_group_func(op_name, output_group, *args)
-
     def _call_group(self, op_name, new, *args):
         """Call a function on a group.
 
@@ -749,7 +763,8 @@ class OpGraph(object):
             - Eliminate _maybe_generate_group_func
             - Eliminate normal _call (I think this can contain it!)
         """
-        new_group_props = self._maybe_generate_group_func(op_name, new, *args)
+        # new_group_props = self._maybe_generate_group_func(op_name, new, *args)
+        new_group_props = self._generate_group_func(op_name, new, *args)
 
         self._adj[new] = self._op(op_name, *args)
         self._properties[new] = new_group_props
@@ -890,6 +905,7 @@ class OpGraph(object):
     #
     # Printing and Visualization
     #
+
     def warnings(self):
         inv_adjacency = self._inverse_adjacency()
         for sym, parents in inv_adjacency.items():
@@ -920,7 +936,7 @@ class OpGraph(object):
                 print spaces + '  ' + thing
         print spaces + ')'
 
-    def to_text(self, sym):
+    def symbol_to_text(self, sym):
         if sym in self._uniques:
             return "({})".format(self.op_to_text(self._adj[sym]))
 
@@ -953,10 +969,10 @@ class OpGraph(object):
         op_name = op[0]
         args = op[1]
         do = {
-            'add': lambda o: "{} + {}".format(self.to_text(args[0]), self.to_text(args[1])),
-            'mul': lambda o: "{} * {}".format(self.to_text(args[0]), self.to_text(args[1])),
-            'time_antiderivative': lambda o: "\\int({})".format(self.to_text(args[0])),
-            'inv': lambda o: "{}^-1".format(self.to_text(args[0])),
+            'add': lambda o: "{} + {}".format(self.symbol_to_text(args[0]), self.symbol_to_text(args[1])),
+            'mul': lambda o: "{} * {}".format(self.symbol_to_text(args[0]), self.symbol_to_text(args[1])),
+            'time_antiderivative': lambda o: "\\int({})".format(self.symbol_to_text(args[0])),
+            'inv': lambda o: "{}^-1".format(self.symbol_to_text(args[0])),
             'null': lambda o: 'null()',
         }
 
@@ -984,14 +1000,14 @@ class OpGraph(object):
             op = self._adj[sym]
 
             if op is None:
-                total_text += '-> {}\n'.format(self.to_text(sym))
+                total_text += '-> {}\n'.format(self.symbol_to_text(sym))
                 continue
 
             if sym in self._uniques:
                 continue
 
             text = self.op_to_text(op)
-            total_text += "{} <- {}\n".format(self.to_text(sym), text)
+            total_text += "{} <- {}\n".format(self.symbol_to_text(sym), text)
         return total_text
 
     def __str__(self):
