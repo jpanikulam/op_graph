@@ -148,6 +148,8 @@ class OpGraph(object):
     def __getattr__(self, key):
         if key in self._op_table.keys():
             return partial(self._call, key)
+        else:
+            raise AttributeError('No such attribute {}'.format(key))
 
     @property
     def name(self):
