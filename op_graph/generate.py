@@ -61,10 +61,36 @@ class StructScope(Scope):
         self.write('};')
 
 
+def type_to_str(type_data):
+    template = ""
+    if len(type_data['template_args']) > 0:
+        template = "<{}>".format(", ".join(type_data['template_args']))
+
+    qualifiers = " ".join(type_data['qualifiers'])
+    postpenders = {
+        'ref': '&',
+        'ptr': '*'
+    }
+
+    postpend = ""
+    for notion, token in postpenders.items():
+        if type_data[notion]:
+            postpend += token
+
+    end_str = "{qualifiers} {type_name}{template}{postpender}".format(
+        qualifiers=qualifiers,
+        type_name=type_data['name'],
+        template=template,
+        postpender=postpend
+    )
+
+    return end_str
+
+
 def generate_struct(struct):
     with StructScope(struct['name']) as code:
         for member in struct['members']:
-            code.line(member['type']['name'], member['name'])
+            code.line(type_to_str(member['type']), member['name'])
     return code.code
 
 
@@ -93,12 +119,12 @@ def declare_struct(struct):
 
 
 def declare_func(func):
-    args_list = ['{} {}'.format(arg['type']['name'], arg['name']) for arg in func['args']]
+    args_list = ['{} {}'.format(type_to_str(arg['type']), arg['name']) for arg in func['args']]
     assert func['kind'] == 'function'
 
     args = ",".join(args_list)
     return "{} {}({})".format(
-        func['returns']['name'],
+        type_to_str(func['returns']),
         func['name'],
         args
     )
