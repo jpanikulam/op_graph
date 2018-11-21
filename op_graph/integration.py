@@ -1,50 +1,8 @@
 import graph
 
 
-def integrate(sym, gr, gr_new):
-    op = gr.adj[sym]
-    sym_prop = gr.properties[sym]
-
-    assert op[0] == 'time_antiderivative'
-    derivative = graph.get_args(op)[0]
-
-    def old(name):
-        return 'old_{}'.format(name)
-
-    def new(name):
-        return 'new_{}'.format(name)
-
-    derivative_old = gr_new.emplace(old(derivative), gr.properties[derivative])
-    gr_new.emplace(old(sym), gr.properties[sym])
-
-    product = gr_new.mul('{}_dt'.format(derivative_old), 'dt', derivative_old)
-    # Integrate normally if not liegroup
-    if sym_prop['type'] != 'liegroup':
-        gr_new.add(new(sym), old(sym), product)
-    else:
-        # Integrate via exponentiation if liegroup
-        group = sym_prop['subtype']
-        exp_delta = gr_new.exp('exp_{}'.format(product), product, kind=group)
-        gr_new.mul(new(sym), exp_delta, old(sym))
-
-
-def to_trivial_integrator(gr):
-    gr_new = graph.OpGraph()
-    states = graph.get_states(gr)
-
-    gr_new.scalar('dt')
-
-    for sym in states:
-        op = gr.adj[sym]
-        sym_prop = gr.properties[sym]
-        integrate(sym, gr, gr_new)
-
-    print gr_new
-
-
 def insert_qdot_function(gr, rk4):
     states = graph.get_states(gr)
-    optimize = gr.to_optimize
 
     q = []
     qdot = []
@@ -163,9 +121,6 @@ def rk4_integrate(gr):
 
 def test():
     import example_graphs
-    # for gr in example_graphs.all_graphs:
-        # rk4 = rk4_integrate(gr)
-        # print rk4
 
     gr = example_graphs.rotary_double_integrator()
     # gr = example_graphs.controlled_vectorspring()

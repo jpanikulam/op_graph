@@ -1012,8 +1012,6 @@ def grouptest():
     m = ['m0', 'm1', 'm2']
     s = ['s0', 's1', 's2']
 
-    out = 'Q'
-
     gr = OpGraph()
 
     for aa in a:

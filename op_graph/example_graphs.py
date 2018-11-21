@@ -1,5 +1,6 @@
 import graph
 
+
 def vectorspring():
     gr = graph.OpGraph('VectorSpring')
     k = gr.scalar('k')
@@ -11,7 +12,7 @@ def vectorspring():
     x = gr.time_antiderivative('x', v)
 
     f = gr.mul('f', k, x)
-    gr.mul('a', imass, 'f')
+    gr.mul('a', imass, f)
     return gr
 
 
@@ -53,7 +54,6 @@ def double_integrator():
     return gr
 
 
-
 def rotary_double_integrator():
     gr = graph.OpGraph('double_integrator')
     gr.vector('u', 3)
@@ -64,7 +64,6 @@ def rotary_double_integrator():
     return gr
 
 
-
 all_graphs = [
     vectorspring(),
     simple_graph(),
@@ -72,3 +71,12 @@ all_graphs = [
     rotary_double_integrator(),
     controlled_vectorspring()
 ]
+
+
+def main():
+    for gr in all_graphs:
+        print gr
+
+
+if __name__ == '__main__':
+    main()
