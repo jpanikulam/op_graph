@@ -26,7 +26,6 @@ def to_arg_ref(my_type):
     primitives = [
         "bool",
         "char",
-        "short int",
         "int",
         "long",
         "size_t",
@@ -35,10 +34,12 @@ def to_arg_ref(my_type):
         "double",
     ]
 
-    if my_type['type']['name'] in primitives:
-        return my_type
+    new_type['type']['qualifiers'].append('const')
+    if new_type['type']['name'] in primitives:
+        return new_type
 
-    new_type['type']['name'] = "const {}&".format(my_type['type']['name'])
+    new_type['type']['ref'] = True
+
     return new_type
 
 
@@ -174,10 +175,6 @@ def graph_to_impl(gr, output):
         if sym not in gr.adj.keys():
             continue
 
-        # if gr.is_constant(sym):
-            # print 'CONSTANT'
-            # continue
-
         if sym in gr.uniques:
             continue
 
@@ -198,6 +195,8 @@ def graph_to_impl(gr, output):
 
 def to_cc_function(func_name, graph_func):
     gr = graph_func['graph']
+    for name, subgraph in gr.subgraph_functions():
+        print generate.generate(to_cc_function(name, subgraph))
 
     impl = graph_to_impl(graph_func['graph'], graph_func['output_name'])
     inputs = graph_func['input_names']
@@ -225,6 +224,8 @@ def to_cc_function(func_name, graph_func):
         impl=impl
     )
 
+    Log.warn(myfunc['deps'])
+
     return myfunc
 
 
@@ -233,6 +234,7 @@ def express(gr):
     for struct in structs.values():
         nstruct = group_to_struct(struct)
         print generate.generate(nstruct)
+        print nstruct['deps']
 
     for name, subgraph in gr.subgraph_functions():
         print generate.generate(to_cc_function(name, subgraph))

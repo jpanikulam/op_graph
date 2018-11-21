@@ -55,7 +55,7 @@ def sys_header_dep(name):
     ]
 
 
-def type_dep(type_name):
+def needed_header(type_name):
     mapping = {
         'SO3': header_dep('sophus'),
         'SE3': header_dep('sophus'),
@@ -66,6 +66,9 @@ def type_dep(type_name):
         'vector': sys_header_dep('vector'),
         'array': sys_header_dep('array'),
     }
-
     depends = mapping.get(type_name, [])
     return depends
+
+
+def type_dep(type_name):
+    return type_name
