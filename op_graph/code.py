@@ -1,6 +1,5 @@
 from collections import defaultdict
 
-
 from generate import generate
 import create
 
@@ -9,8 +8,9 @@ class CodeGraph(object):
     def __init__(self):
         self._children = []
 
-    def add_child(self, thing):
+    def add_child(self, thing, expose=True, inline=True):
         self._children.append(thing)
+        deps = {}
 
     def generate(self):
         text = ""
@@ -40,7 +40,7 @@ def test():
             create.create_lvalue('double', 'goomba'),
             create.create_lvalue('Fromp&', 'goomba2'),
         ],
-        'double'
+        create.create_type('double')
     )
 
     cg.add_child(myfunc)

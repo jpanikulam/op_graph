@@ -2,8 +2,15 @@ from text import clang_fmt
 
 
 class CodeBlock(object):
-    def __init__(self):
+    def __init__(self, deps=[]):
+        assert isinstance(deps, list)
         self.code = ""
+        self._deps = deps
+
+    @property
+    def deps(self):
+        """Dependencies."""
+        return self._deps
 
     def line(self, *args):
         ltext = ' '.join(map(str, args))

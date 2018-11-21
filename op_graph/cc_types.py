@@ -1,7 +1,7 @@
 import parse
 
 
-qualifiers = [
+language_qualifiers = [
     'const',
     'constexpr',
     'volatile',
@@ -11,7 +11,7 @@ qualifiers = [
 def typen(text):
     """TODO: Use clang."""
     qualifiers = []
-    for qualifier in qualifiers:
+    for qualifier in language_qualifiers:
         text, present = parse.get_remove(text, qualifier)
 
         if present:
@@ -25,10 +25,12 @@ def typen(text):
     else:
         template_arguments = []
 
-    type_name, var_text = text.split(' ')
     # Name
-    _, ref = parse.get_remove(var_text, '&')
-    _, ptr = parse.get_remove(var_text, '*')
+    type_name, ref = parse.get_remove(text, '&')
+    if not ref:
+        type_name, ptr = parse.get_remove(text, '*')
+    else:
+        ptr = False
 
     # Type manipulation
     return {
@@ -37,6 +39,7 @@ def typen(text):
         'qualifiers': qualifiers,
         'ref': ref,
         'ptr': ptr,
+        'deps': type_dep(type_name)
     }
 
 
@@ -46,24 +49,23 @@ def header_dep(name):
     ]
 
 
-def type_dep(type_name):
+def sys_header_dep(name):
+    return [
+        {'header': name}
+    ]
 
+
+def type_dep(type_name):
     mapping = {
         'SO3': header_dep('sophus'),
         'SE3': header_dep('sophus'),
         'SO2': header_dep('sophus'),
         'SE2': header_dep('sophus'),
         'VecNd': header_dep('eigen'),
+        'MatNd': header_dep('eigen'),
+        'vector': sys_header_dep('vector'),
+        'array': sys_header_dep('array'),
     }
 
     depends = mapping.get(type_name, [])
     return depends
-
-
-def main():
-    'VecNd<4>'
-
-    pass
-
-if __name__ == '__main__':
-    main()
