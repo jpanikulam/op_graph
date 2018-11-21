@@ -27,7 +27,6 @@ def to_arg_ref(my_type):
         "bool",
         "char",
         "int",
-        "long",
         "size_t",
         "wchar_t",
         "float",
@@ -182,8 +181,9 @@ def graph_to_impl(gr, output):
 
         if op is not None:
             sym_prop = gr.properties[sym]
+            cpp_type = to_cpp_type(sym_prop)
             decl = "const {type} {name}".format(
-                type=to_cpp_type(sym_prop),
+                type=cpp_type,
                 name=sym
             )
             cb.set(decl, sym_children_to_cc(sym, gr))

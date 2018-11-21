@@ -20,6 +20,7 @@ def typen(text):
     if ('<' in text) and ('>' in text):
         template = parse.between(text, '<', '>')
         text = parse.not_between(text, '<', '>')
+        assert ' ' not in text, "{} has a space in it".format(text)
 
         template_arguments = parse.clean_split(template, ',')
     else:
