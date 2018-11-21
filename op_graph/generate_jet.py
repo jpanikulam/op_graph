@@ -1,46 +1,58 @@
-from graph import OpGraph, create_scalar, create_vector
+import graph
 import graph_to_cc
 import integration
 
 
+def make_force_fcn():
+    gr = graph.OpGraph('ForceFromThrottle')
+    gr.scalar('throttle')
+    gr.identity('out', 'throttle')
+    return gr
+
+
 def make_simple_jet():
-    graph = OpGraph()
+    gr = graph.OpGraph()
 
-    graph.scalar('mass')
-    graph.scalar('temperature')
+    gr.scalar('mass')
+    gr.vector('external_force', 3)
 
-    graph.so3('R_world_from_body')
-    graph.optimize(graph.vector('q', 3))
-    graph.time_antiderivative('w', 'q')
-    graph.time_antiderivative('R_world_from_body', 'w')
+    gr.so3('R_world_from_body')
+    gr.optimize(gr.vector('q', 3))
+    gr.time_antiderivative('w', 'q')
+    gr.time_antiderivative('R_world_from_body', 'w')
 
     # Register a function that someone will implement in C++
-    graph.add_function(
-        'force_from_throttle',
-        returns=create_scalar(),
-        arguments=(
-            create_scalar(),   # Throttle
-            create_scalar(),   # Temperature
-            create_vector(3),  # Airspeed (Just to throw a vector in)
-        )
-    )
+    # gr.add_function(
+    #     'force_from_throttle',
+    #     returns=graph.create_scalar(),
+    #     arguments=(
+    #         graph.create_scalar(),   # Throttle
+    #         graph.create_scalar(),   # Temperature
+    #         graph.create_vector(3),  # Airspeed (Just to throw a vector in)
+    #     )
+    # )
 
-    graph.optimize(graph.scalar('throttle_dot'))
+    # Or make a dummy we can use
+    gr.add_graph_as_function('force_from_throttle', make_force_fcn(), 'out')
 
-    graph.vector('v', 3)
-    graph.time_antiderivative('throttle_pct', 'throttle_dot')
-    graph.func('force_from_throttle', 'thrust', 'throttle_pct', 'temperature', 'v')
+    gr.optimize(gr.scalar('throttle_dot'))
 
-    graph.vector('unit_z', 3)
-    graph.mul('force_world', 'R_world_from_body', graph.mul('body_force', 'thrust', 'unit_z'))
+    gr.vector('v', 3)
+    gr.time_antiderivative('throttle_pct', 'throttle_dot')
+    gr.func('force_from_throttle', 'thrust', 'throttle_pct')
 
-    graph.mul('a', graph.inv('inv_mass', 'mass'), 'force_world')
+    gr.vector('unit_z', 3)
+    gr.mul('force_world', 'R_world_from_body', gr.mul('body_force', 'thrust', 'unit_z'))
 
-    graph.time_antiderivative('v', 'a')
-    graph.time_antiderivative('x', 'v')
+    gr.add('net_force_world', 'force_world', 'external_force')
 
-    # graph.warnings()
-    return graph
+    gr.mul('a', gr.inv('inv_mass', 'mass'), 'net_force_world')
+
+    gr.time_antiderivative('v', 'a')
+    gr.time_antiderivative('x', 'v')
+
+    gr.warnings()
+    return gr
 
 
 def main():
@@ -49,8 +61,6 @@ def main():
     rk4 = integration.rk4_integrate(jet_graph)
 
     graph_to_cc.express(rk4)
-    # gd.make_types(jet_graph)
-    # gd.generate_dynamics(jet_graph)
 
 
 if __name__ == '__main__':
