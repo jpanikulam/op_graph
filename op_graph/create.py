@@ -1,4 +1,5 @@
 import cc_types
+from itertools import chain
 
 
 def create_type(cpp_type):
@@ -16,11 +17,13 @@ def create_lvalue(cpp_type, name):
 
 
 def create_struct(name, members):
+    dependencies = list(chain.from_iterable(map(lambda o: o['deps'], members))),
+
     return {
         'kind': 'struct',
         'name': name,
         'members': members,
-        'deps': list(map(lambda o: o['deps'], members)),
+        'deps': dependencies
     }
 
 
@@ -29,7 +32,7 @@ def create_function(name, arguments, returns, impl=None):
         impl_deps = []
     else:
         impl_deps = impl.deps
-    deps = list(map(lambda o: o['deps'], arguments)) + impl_deps
+    deps = list(chain.from_iterable(map(lambda o: o['deps'], arguments))) + impl_deps
 
     return {
         'kind': 'function',
