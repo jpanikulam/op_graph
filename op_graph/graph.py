@@ -4,11 +4,9 @@ from functools import partial
 
 from graph_tools import topological_sort
 from collections import defaultdict
-import pprint
 
 from log import Log
-
-MACHINES_CONTROL_EVERYTHING = True
+import op_defs
 
 #
 # Generate types in the "platonic ideal"
@@ -20,80 +18,6 @@ def get_args(op):
         return op[1]
     else:
         return []
-
-
-def create_constant(value, properties):
-    """TODO is this the right approach?"""
-    properties['constant'] = True
-    properties['value'] = value
-    return properties
-
-
-def create_scalar():
-    prop = {
-        'type': 'scalar',
-        'dim': 1
-    }
-    return prop
-
-
-def create_vector(dim):
-    assert isinstance(dim, int)
-    prop = {
-        'type': 'vector',
-        'dim': dim
-    }
-    return prop
-
-
-def create_matrix(dim):
-    assert isinstance(dim, tuple)
-    assert len(dim) == 2
-    assert MACHINES_CONTROL_EVERYTHING
-    prop = {
-        'type': 'matrix',
-        'dim': dim
-    }
-    return prop
-
-
-VALID_LIEGROUPS = []
-
-
-def create_liegroup(subtype):
-    VALID_LIEGROUPS.append(subtype)
-    mapping = {
-        'SO3': {'dim': 3, 'algebra_dim': 3},
-        'SE3': {'dim': 3, 'algebra_dim': 6},
-    }
-
-    default = {
-        'type': 'liegroup',
-        'subtype': subtype
-    }
-
-    default.update(mapping[subtype])
-    return default
-
-
-def create_group(element_properties, names, inherent_type=None):
-    assert isinstance(element_properties, (list, tuple))
-    assert isinstance(names, (list, tuple))
-    assert len(names) == len(element_properties)
-    return {
-        'type': 'group',
-        'elements': tuple(element_properties),
-        'inherent_type': inherent_type,
-        'names': tuple(names)
-    }
-
-
-def create_SO3():
-    return create_liegroup('SO3')
-
-
-def create_SE3():
-    return create_liegroup('SE3')
 
 
 def get_states(gr):
@@ -139,10 +63,13 @@ class OpGraph(object):
         self._group_types = {}
 
         self._op_table = {}
-        self._op_table['mul'] = self._mul()
-        self._op_table['add'] = self._add()
-        self._op_table['inv'] = self._inv()
-        self._op_table['exp'] = self._exp()
+        self._op_table['mul'] = op_defs.mul(self)
+        self._op_table['add'] = op_defs.add(self)
+        self._op_table['inv'] = op_defs.inv(self)
+        self._op_table['exp'] = op_defs.exp(self)
+
+        self._d_table = {}
+        self._d_table['mul'] = op_defs.dmul(self)
 
     def __getattr__(self, key):
         if key in self._op_table.keys():
@@ -214,7 +141,7 @@ class OpGraph(object):
             for field_name in field_names:
                 self._needs(field_name)
                 real_field_props.append(self._properties[field_name])
-        self._group_types[name] = create_group(real_field_props, field_names, inherent_type=name)
+        self._group_types[name] = op_defs.create_group(real_field_props, field_names, inherent_type=name)
 
     def anon(self):
         return self.unique("anon")
@@ -253,6 +180,7 @@ class OpGraph(object):
         assert name in self._adj.keys(), "Symbol '{}' does not exist".format(name)
 
     def _needs_input(self, name):
+        self._needs(name)
         assert self._adj[name] is None, "{} must be an input".format(name)
 
     def _needs_not(self, name):
@@ -331,7 +259,7 @@ class OpGraph(object):
         outcome_types = {
             'vector': lambda: self._inherit(sym),
             'scalar': lambda: self._inherit(sym),
-            'liegroup': lambda: create_vector(sym_prop['algebra_dim']),
+            'liegroup': lambda: op_defs.create_vector(sym_prop['algebra_dim']),
         }
 
         return outcome_types[self._type(sym)]()
@@ -341,9 +269,9 @@ class OpGraph(object):
         self._needs_type(sym, 'vector')
         assert sym_prop['dim'] in (3, 6)
         if sym_prop['dim'] == 3:
-            return create_liegroup('SO3')
+            return op_defs.create_liegroup('SO3')
         else:
-            return create_liegroup('SE3')
+            return op_defs.create_liegroup('SE3')
 
     def _needs_valid_derivative_type(self, sym, dsym):
         """Returns True if dsym can be the derivative of sym."""
@@ -424,7 +352,7 @@ class OpGraph(object):
             self._needs_input(sym)
             props.append(self._properties[sym])
 
-        group_prop = create_group(props, names=self._default_list(syms, names), inherent_type=inherent_type)
+        group_prop = op_defs.create_group(props, names=self._default_list(syms, names), inherent_type=inherent_type)
         self.emplace(pregroup_name, group_prop)
         self.degroupify(syms, pregroup_name)
         return pregroup_name
@@ -451,20 +379,20 @@ class OpGraph(object):
 
     def constant_scalar(self, name, value):
         self._adj[name] = self._op('I', value)
-        self._properties[name] = create_scalar()
+        self._properties[name] = op_defs.create_scalar()
         return name
 
     def scalar(self, name):
-        return self.emplace(name, create_scalar())
+        return self.emplace(name, op_defs.create_scalar())
 
     def vector(self, name, dim):
-        return self.emplace(name, create_vector(dim))
+        return self.emplace(name, op_defs.create_vector(dim))
 
     def so3(self, name):
-        return self.emplace(name, create_SO3())
+        return self.emplace(name, op_defs.create_SO3())
 
     def se3(self, name):
-        return self.emplace(name, create_SE3())
+        return self.emplace(name, op_defs.create_SE3())
 
     def add_graph_as_function(self, name, graph, output_sym, input_order=[]):
         """Graph can't contain derivatives.
@@ -582,7 +510,11 @@ class OpGraph(object):
         if inherent_type in self._group_types:
             names = self._group_types[inherent_type]['names']
 
-        group_properties = create_group(properties, names=self._default_list(syms, names), inherent_type=inherent_type)
+        group_properties = op_defs.create_group(
+            properties,
+            names=self._default_list(syms, names),
+            inherent_type=inherent_type
+        )
         self._adj[group_sym] = self._op('groupify', *syms)
         self._properties[group_sym] = group_properties
         return group_sym
@@ -594,7 +526,7 @@ class OpGraph(object):
         new_properties.extend(old_properties)
         new_properties.extend(map(self._properties.get(new_syms)))
         self._adj[new_group_sym] = self._op('extend_group', old_group_sym, *new_syms)
-        self._properties[new_group_sym] = create_group(new_properties)
+        self._properties[new_group_sym] = op_defs.create_group(new_properties)
         return new_group_sym
 
     def combine_groups(self, new_group_sym, sym_groups=[]):
@@ -606,7 +538,7 @@ class OpGraph(object):
             new_properties.extend(old_properties['elements'])
 
         self._adj[new_group_sym] = self._op('combine_groups', *sym_groups)
-        self._properties[new_group_sym] = create_group(new_properties)
+        self._properties[new_group_sym] = op_defs.create_group(new_properties)
         return new_group_sym
 
     def extract(self, sym, group_sym, index):
@@ -798,115 +730,23 @@ class OpGraph(object):
         return new
 
     def forward_mode_differentiate(self, wrt):
-        pass
+        """Differentiate the graph with respect to wrt
 
-    def _inv(self):
-        return {
-            ('liegroup',): {
-                'returns': self._inherit_last,
-                'needs': [],
-            },
-            ('scalar',): {
-                'returns': self._inherit_last,
-                'needs': [],
-            }
-        }
+        "wrt" -> "w.r.t" -> "with respect to" in case you are a goober
+        """
+        self._needs_input(wrt)
+        inv_adj = self._inverse_adjacency()
 
-    def _add(self):
-        return {
-            ('liegroup', 'vector'): {
-                'returns': self._inherit_first,
-                'needs': [self._needs_valid_derivative_type],
-                'generate': lambda n, a, b: self._call('mul', n, self._anony_call('exp', b), a)
-            },
-            ('vector', 'vector'): {
-                'returns': self._inherit_last,
-                'needs': [self._needs_same]
-            },
-            ('scalar', 'scalar'): {
-                'returns': self._inherit_last,
-                'needs': [self._needs_same]
-            },
-        }
-
-    def _mul(self):
-        # How do we generate *template* types?
-        # Eesh, does this mean we have to define a template system?
-        return {
-            ('liegroup', 'vector'): {
-                'returns': self._inherit_last,
-                'needs': [self._needs_same_dim]
-            },
-            ('liegroup', 'liegroup'): {
-                'returns': self._inherit_last,
-                'needs': [self._needs_same]
-            },
-            ('scalar', 'vector'): {
-                'returns': self._inherit_last,
-                'needs': []
-            },
-            ('scalar', 'scalar'): {
-                'returns': self._inherit_last,
-                'needs': [self._needs_same]
-            },
-        }
-
-    def _dmul(self):
-        """Generate derivatives for multiplication."""
-        return {
-            ('liegroup', 'vector'): (
-                {
-                    'generate': lambda a, b: ('negate', ('skew', ('mul', a, b)))
-                },
-                {
-                    'generate': lambda a, b: ('identity', b)
-                }
-            ),
-            ('liegroup', 'liegroup'): (
-                {
-                    'generate': lambda a, b: ('identity', a)
-                },
-                {
-                    'generate': lambda a, b: ('Adj', a)
-                }
-            ),
-            ('scalar', 'vector'): (
-                {
-                    'generate': lambda a, b: ('identity', b)
-                },
-                # {
-                #     'generate': lambda a, b: ('matrix_identity', b)
-                # }
-            ),
-            ('scalar', 'scalar'): (
-                {
-                    'generate': lambda a, b: ('identity', b)
-                },
-                {
-                    'generate': lambda a, b: ('identity', a)
-                }
-
-            ),
-        }
-
-    def _exp(self):
-        return {
-            ('vector',): {
-                'returns': self.exp_type,
-                'needs': []
-            },
-            ('scalar',): {
-                'returns': lambda a: create_scalar(),
-                'needs': []
-            }
-        }
+        to_diff = [wrt]
+        inv_adj[wrt]
+        to_diff.append(wrt)
 
     def log(self, sym_new, a, kind=None):
         self._needs(a)
         self._needs_valid_liegroup(a)
         self._adj[sym_new] = self._op('log', a)
         a_prop = self._properties[a]
-        self._properties[sym_new] = create_vector(a_prop['algebra_dim'])
+        self._properties[sym_new] = op_defs.create_vector(a_prop['algebra_dim'])
         return sym_new
 
     def time_antiderivative(self, sym, dsym):
