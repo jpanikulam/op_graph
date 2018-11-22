@@ -71,6 +71,16 @@ def create_SE3():
     return create_liegroup('SE3')
 
 
+def create_ops(gr):
+    """TODO: Use this instead of anything else."""
+    {
+        'inv': inv(gr),
+        'mul': mul(gr),
+        'add': add(gr),
+        'exp': exp(gr),
+    }
+
+
 def inv(gr):
     return {
         ('liegroup',): {
@@ -99,6 +109,23 @@ def add(gr):
             'returns': gr._inherit_last,
             'needs': [gr._needs_same]
         },
+    }
+
+
+def dadd(gr):
+    return {
+        ('liegroup', 'vector'): (
+            {'generate': lambda a, b: a / a}  # Must Fail
+        ),
+        ('vector', 'vector'): (
+            {'generate': lambda a, b: ('mtx_identity', a)},
+            {'generate': lambda a, b: ('mtx_identity', b)},
+        ),
+        ('scalar', 'scalar'): (
+            {'generate': lambda a, b: 1},
+            {'generate': lambda a, b: 1},
+        ),
+
     }
 
 
@@ -133,12 +160,12 @@ def dmul(gr):
                 'generate': lambda a, b: ('negate', ('skew', ('mul', a, b)))
             },
             {
-                'generate': lambda a, b: ('identity', b)
+                'generate': lambda a, b: b
             }
         ),
         ('liegroup', 'liegroup'): (
             {
-                'generate': lambda a, b: ('identity', a)
+                'generate': lambda a, b: a
             },
             {
                 'generate': lambda a, b: ('Adj', a)
@@ -146,7 +173,7 @@ def dmul(gr):
         ),
         ('scalar', 'vector'): (
             {
-                'generate': lambda a, b: ('identity', b)
+                'generate': lambda a, b: b
             },
             # {
             #     'generate': lambda a, b: ('matrix_identity', b)
@@ -154,10 +181,10 @@ def dmul(gr):
         ),
         ('scalar', 'scalar'): (
             {
-                'generate': lambda a, b: ('identity', b)
+                'generate': lambda a, b: b
             },
             {
-                'generate': lambda a, b: ('identity', a)
+                'generate': lambda a, b: a
             }
 
         ),
