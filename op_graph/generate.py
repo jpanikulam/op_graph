@@ -3,9 +3,8 @@ from text import clang_fmt
 
 class CodeBlock(object):
     def __init__(self, deps=[]):
-        assert isinstance(deps, list)
         self.code = ""
-        self._deps = deps
+        self._deps = list(deps)
 
     @property
     def deps(self):
@@ -96,7 +95,7 @@ def generate_struct(struct):
 
 def generate_func(func):
     text = ""
-    text += declare(func)
+    text += func_decl(func)
     with Scope() as code:
         if func['impl'] is not None:
             code.write(func['impl'])
@@ -118,7 +117,7 @@ def declare_struct(struct):
     return generate(struct)
 
 
-def declare_func(func):
+def func_decl(func):
     args_list = ['{} {}'.format(type_to_str(arg['type']), arg['name']) for arg in func['args']]
     assert func['kind'] == 'function'
 
@@ -128,6 +127,10 @@ def declare_func(func):
         func['name'],
         args
     )
+
+
+def declare_func(func):
+    return func_decl(func) + ';'
 
 
 def declare(thing):
