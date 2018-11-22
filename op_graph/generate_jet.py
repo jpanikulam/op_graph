@@ -4,6 +4,17 @@ import integration
 
 from code import CodeGraph
 
+# Register a function that someone will implement in C++
+# gr.add_function(
+#     'force_from_throttle',
+#     returns=graph.create_scalar(),
+#     arguments=(
+#         graph.create_scalar(),   # Throttle
+#         graph.create_scalar(),   # Temperature
+#         graph.create_vector(3),  # Airspeed (Just to throw a vector in)
+#     )
+# )
+
 
 def make_force_fcn():
     gr = graph.OpGraph('ForceFromThrottle')
@@ -22,17 +33,6 @@ def make_simple_jet():
     gr.optimize(gr.vector('q', 3))
     gr.time_antiderivative('w', 'q')
     gr.time_antiderivative('R_world_from_body', 'w')
-
-    # Register a function that someone will implement in C++
-    # gr.add_function(
-    #     'force_from_throttle',
-    #     returns=graph.create_scalar(),
-    #     arguments=(
-    #         graph.create_scalar(),   # Throttle
-    #         graph.create_scalar(),   # Temperature
-    #         graph.create_vector(3),  # Airspeed (Just to throw a vector in)
-    #     )
-    # )
 
     # Or make a dummy we can use
     gr.add_graph_as_function('force_from_throttle', make_force_fcn(), 'out')
