@@ -11,7 +11,6 @@ def create_lvalue(cpp_type, name):
         'kind': 'lvalue',
         'type': created_type,
         'name': name,
-        'deps': created_type['deps'],
     }
 
 
