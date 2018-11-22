@@ -2,6 +2,8 @@ import graph
 import graph_to_cc
 import integration
 
+from code import CodeGraph
+
 
 def make_force_fcn():
     gr = graph.OpGraph('ForceFromThrottle')
@@ -57,10 +59,15 @@ def make_simple_jet():
 
 def main():
     jet_graph = make_simple_jet()
-
     rk4 = integration.rk4_integrate(jet_graph)
 
-    graph_to_cc.express(rk4)
+    cg = CodeGraph(name='integrator', namespaces=['planning', 'jet'])
+    graph_to_cc.express(cg, rk4)
+
+    root = '/home/jacob/repos/experiments/'
+    loc = 'planning/jet'
+    name = 'jet_dynamics'
+    cg.write_to_files(root, loc, name)
 
 
 if __name__ == '__main__':
