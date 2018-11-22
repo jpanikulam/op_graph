@@ -95,8 +95,10 @@ def zero(data):
         'SE2': "SE2()",
         'VecNd': "{}::Zero()".format(full_name),
         'MatNd': "{}::Zero()".format(full_name),
+        'double': "0.0",
+        'float': "0.0",
     }
-    return router[data['name']]
+    return router.get(data['name'])
 
 
 def needed_header(type_name):

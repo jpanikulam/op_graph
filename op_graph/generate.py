@@ -64,13 +64,15 @@ class StructScope(Scope):
 def generate_struct(struct):
     with StructScope(struct['name']) as code:
         for member in struct['members']:
-            # code.line(cc_types.type_to_str(member['type']), member['name'])
             lhs = "{} {}".format(
                 cc_types.type_to_str(member['type']),
                 member['name']
             )
             rhs = cc_types.zero(member['type'])
-            code.set(lhs, rhs)
+            if rhs:
+                code.set(lhs, rhs)
+            else:
+                code.line(lhs)
 
     return code.code
 
