@@ -65,10 +65,10 @@ def make_logger(verbosity_type, color):
                 out_str = " ".join(map(str, txt))
 
             if '\n' in out_str:
-                pre = '\n'
+                pre = '...\n'
             else:
-                pre = ""
-            print("{}:{} {}{}{}".format(caller_str(), pre, color, out_str, Style.RESET_ALL))
+                pre = " "
+            print("{}:{}{}{}{}".format(caller_str(), color, pre, out_str, Style.RESET_ALL))
 
     return new_logger
 
