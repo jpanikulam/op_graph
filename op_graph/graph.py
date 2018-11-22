@@ -797,6 +797,9 @@ class OpGraph(object):
             self._properties[new] = real_func['returns'](*args)
         return new
 
+    def forward_mode_differentiate(self, wrt):
+        pass
+
     def _inv(self):
         return {
             ('liegroup',): {
@@ -846,6 +849,44 @@ class OpGraph(object):
                 'returns': self._inherit_last,
                 'needs': [self._needs_same]
             },
+        }
+
+    def _dmul(self):
+        """Generate derivatives for multiplication."""
+        return {
+            ('liegroup', 'vector'): (
+                {
+                    'generate': lambda a, b: ('negate', ('skew', ('mul', a, b)))
+                },
+                {
+                    'generate': lambda a, b: ('identity', b)
+                }
+            ),
+            ('liegroup', 'liegroup'): (
+                {
+                    'generate': lambda a, b: ('identity', a)
+                },
+                {
+                    'generate': lambda a, b: ('Adj', a)
+                }
+            ),
+            ('scalar', 'vector'): (
+                {
+                    'generate': lambda a, b: ('identity', b)
+                },
+                # {
+                #     'generate': lambda a, b: ('matrix_identity', b)
+                # }
+            ),
+            ('scalar', 'scalar'): (
+                {
+                    'generate': lambda a, b: ('identity', b)
+                },
+                {
+                    'generate': lambda a, b: ('identity', a)
+                }
+
+            ),
         }
 
     def _exp(self):
