@@ -40,7 +40,7 @@ def typen(text):
         'qualifiers': qualifiers,
         'ref': ref,
         'ptr': ptr,
-        'deps': type_dep(type_name)
+        # 'deps': type_dep(type_name)
     }
 
 
@@ -58,12 +58,12 @@ def sys_header_dep(name):
 
 def needed_header(type_name):
     mapping = {
-        'SO3': header_dep('sophus'),
-        'SE3': header_dep('sophus'),
-        'SO2': header_dep('sophus'),
-        'SE2': header_dep('sophus'),
-        'VecNd': header_dep('eigen'),
-        'MatNd': header_dep('eigen'),
+        'SO3': header_dep('sophus.hh'),
+        'SE3': header_dep('sophus.hh'),
+        'SO2': header_dep('sophus.hh'),
+        'SE2': header_dep('sophus.hh'),
+        'VecNd': header_dep('eigen.hh'),
+        'MatNd': header_dep('eigen.hh'),
         'vector': sys_header_dep('vector'),
         'array': sys_header_dep('array'),
     }
