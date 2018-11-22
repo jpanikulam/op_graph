@@ -1,5 +1,5 @@
 import parse
-
+from copy import deepcopy
 
 language_qualifiers = [
     'const',
@@ -44,6 +44,32 @@ def typen(text):
     }
 
 
+def type_to_str(type_data):
+    template = ""
+    if len(type_data['template_args']) > 0:
+        template = "<{}>".format(", ".join(type_data['template_args']))
+
+    qualifiers = " ".join(type_data['qualifiers'])
+    postpenders = {
+        'ref': '&',
+        'ptr': '*'
+    }
+
+    postpend = ""
+    for notion, token in postpenders.items():
+        if type_data[notion]:
+            postpend += token
+
+    end_str = "{qualifiers} {type_name}{template}{postpender}".format(
+        qualifiers=qualifiers,
+        type_name=type_data['name'],
+        template=template,
+        postpender=postpend
+    )
+
+    return end_str
+
+
 def header_dep(name):
     return [
         {'header': name}
@@ -54,6 +80,23 @@ def sys_header_dep(name):
     return [
         {'header': name}
     ]
+
+
+def zero(data):
+    ddata = deepcopy(data)
+    ddata['ptr'] = False
+    ddata['ref'] = False
+    ddata['qualifiers'] = []
+    full_name = type_to_str(ddata)
+    router = {
+        'SO3': "SO3()",
+        'SE3': "SE3()",
+        'SO2': "SO2()",
+        'SE2': "SE2()",
+        'VecNd': "{}::Zero()".format(full_name),
+        'MatNd': "{}::Zero()".format(full_name),
+    }
+    return router[data['name']]
 
 
 def needed_header(type_name):

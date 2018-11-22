@@ -1,4 +1,5 @@
 from text import clang_fmt
+import cc_types
 
 
 class CodeBlock(object):
@@ -60,36 +61,17 @@ class StructScope(Scope):
         self.write('};')
 
 
-def type_to_str(type_data):
-    template = ""
-    if len(type_data['template_args']) > 0:
-        template = "<{}>".format(", ".join(type_data['template_args']))
-
-    qualifiers = " ".join(type_data['qualifiers'])
-    postpenders = {
-        'ref': '&',
-        'ptr': '*'
-    }
-
-    postpend = ""
-    for notion, token in postpenders.items():
-        if type_data[notion]:
-            postpend += token
-
-    end_str = "{qualifiers} {type_name}{template}{postpender}".format(
-        qualifiers=qualifiers,
-        type_name=type_data['name'],
-        template=template,
-        postpender=postpend
-    )
-
-    return end_str
-
-
 def generate_struct(struct):
     with StructScope(struct['name']) as code:
         for member in struct['members']:
-            code.line(type_to_str(member['type']), member['name'])
+            # code.line(cc_types.type_to_str(member['type']), member['name'])
+            lhs = "{} {}".format(
+                cc_types.type_to_str(member['type']),
+                member['name']
+            )
+            rhs = cc_types.zero(member['type'])
+            code.set(lhs, rhs)
+
     return code.code
 
 
@@ -118,12 +100,12 @@ def declare_struct(struct):
 
 
 def func_decl(func):
-    args_list = ['{} {}'.format(type_to_str(arg['type']), arg['name']) for arg in func['args']]
+    args_list = ['{} {}'.format(cc_types.type_to_str(arg['type']), arg['name']) for arg in func['args']]
     assert func['kind'] == 'function'
 
     args = ",".join(args_list)
     return "{} {}({})".format(
-        type_to_str(func['returns']),
+        cc_types.type_to_str(func['returns']),
         func['name'],
         args
     )
