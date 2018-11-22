@@ -1,5 +1,6 @@
 import generate
 import create
+from code import CodeGraph
 import graph
 import graph_tools
 import integration
@@ -193,10 +194,12 @@ def graph_to_impl(gr, output):
     return cb
 
 
-def to_cc_function(func_name, graph_func):
+def to_cc_function(func_name, graph_func, code_graph):
     gr = graph_func['graph']
     for name, subgraph in gr.subgraph_functions():
-        print generate.generate(to_cc_function(name, subgraph))
+        sub_function = to_cc_function(name, subgraph, code_graph)
+        code_graph.add_function(sub_function, expose=False)
+        # print generate.generate(sub_function)
 
     impl = graph_to_impl(graph_func['graph'], graph_func['output_name'])
     inputs = graph_func['input_names']
@@ -224,27 +227,33 @@ def to_cc_function(func_name, graph_func):
         impl=impl
     )
 
-    Log.warn(myfunc['deps'])
-
     return myfunc
 
 
-def express(gr):
+def express(cg, gr):
+    assert isinstance(cg, CodeGraph)
+    assert isinstance(gr, graph.OpGraph)
+
     structs = gr.group_types
     for struct in structs.values():
         nstruct = group_to_struct(struct)
-        print generate.generate(nstruct)
-        print nstruct['deps']
+        cg.add_struct(nstruct)
 
     for name, subgraph in gr.subgraph_functions():
-        print generate.generate(to_cc_function(name, subgraph))
+        cc_func = to_cc_function(name, subgraph, cg)
+        cg.add_function(cc_func)
+
+    Log.debug('Source------------')
+    Log.debug(cg.generate_source())
+    Log.debug('Header------------')
+    Log.debug(cg.generate_header())
 
 
 def test_graph():
     import example_graphs
     # gr = example_graphs.double_integrator()
-    gr = example_graphs.simple_graph()
-    # gr = example_graphs.rotary_double_integrator()
+    # gr = example_graphs.simple_graph()
+    gr = example_graphs.rotary_double_integrator()
     # gr = example_graphs.controlled_vectorspring()
 
     return gr
@@ -253,7 +262,8 @@ def test_graph():
 def main():
     gr = test_graph()
     rk4_gr = integration.rk4_integrate(gr)
-    express(rk4_gr)
+    cg = CodeGraph(name='integrator', namespaces=['planning', 'jet'])
+    express(cg, rk4_gr)
 
 
 if __name__ == '__main__':
