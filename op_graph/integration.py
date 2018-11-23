@@ -23,13 +23,13 @@ def insert_qdot_function(gr, rk4):
     qdot_gr = gr.extract_subgraph(Qdot, up_to=q)
 
     for qq in q:
-        qdot_gr.emplace(qq, gr.properties[qq])
+        qdot_gr.emplace(qq, gr.get_properties(qq))
 
     for uu in u:
-        qdot_gr.emplace(uu, gr.properties[uu])
+        qdot_gr.emplace(uu, gr.get_properties(uu))
 
     for zz in z:
-        qdot_gr.emplace(zz, gr.properties[zz])
+        qdot_gr.emplace(zz, gr.get_properties(zz))
 
     Q = qdot_gr.pregroup('Q', q, inherent_type='State')
     U = qdot_gr.pregroup('U', u, inherent_type='Controls')
@@ -69,13 +69,13 @@ def rk4_integrate(gr):
     rk4 = graph.OpGraph('qdot')
     q, u, z = insert_qdot_function(gr, rk4)
     for qq in q:
-        rk4.emplace(qq, gr.properties[qq])
+        rk4.emplace(qq, gr.get_properties(qq))
 
     for uu in u:
-        rk4.emplace(uu, gr.properties[uu])
+        rk4.emplace(uu, gr.get_properties(uu))
 
     for zz in z:
-        rk4.emplace(zz, gr.properties[zz])
+        rk4.emplace(zz, gr.get_properties(zz))
 
     half = rk4.constant_scalar('half', 0.5)
     sixth = rk4.constant_scalar('sixth', 1.0 / 6.0)

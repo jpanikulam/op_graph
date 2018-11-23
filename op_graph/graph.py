@@ -87,16 +87,17 @@ class OpGraph(object):
         return self._adj
 
     @property
-    def properties(self):
-        return self._properties
-
-    @property
     def to_optimize(self):
         return self._to_optimize
 
     @property
     def uniques(self):
         return self._uniques
+
+    def get_properties(self, sym):
+        if isinstance(sym, op_defs.Constant):
+            return sym.properties
+        return self._properties[sym]
 
     def _copy_types(self, gr):
         # TODO: Make sure this doesn't overwrite anything
@@ -141,7 +142,7 @@ class OpGraph(object):
         if len(field_properties) == 0:
             for field_name in field_names:
                 self._needs(field_name)
-                real_field_props.append(self._properties[field_name])
+                real_field_props.append(self.get_properties(field_name))
         self._group_types[name] = op_defs.create_group(real_field_props, field_names, inherent_type=name)
 
     def anon(self):
@@ -170,26 +171,28 @@ class OpGraph(object):
             return default
         return otherwise
 
-    def _type(self, name):
-        self._needs(name)
-        return self._properties[name]['type']
+    def _type(self, sym):
+        self._needs(sym)
+        return self.get_properties(sym)['type']
 
-    def _types(self, names):
-        return tuple(map(self._type, names))
+    def _types(self, syms):
+        return tuple(map(self._type, syms))
 
-    def _needs(self, name):
-        assert name in self._adj.keys(), "Symbol '{}' does not exist".format(name)
+    def _needs(self, sym):
+        if isinstance(sym, op_defs.Constant):
+            return
+        assert sym in self._adj.keys(), "Symbol '{}' does not exist".format(sym)
 
-    def _needs_input(self, name):
-        self._needs(name)
-        assert self._adj[name] is None, "{} must be an input".format(name)
+    def _needs_input(self, sym):
+        self._needs(sym)
+        assert self._adj[sym] is None, "{} must be an input".format(sym)
 
-    def _needs_not(self, name):
-        """Verify that name is currently not assigned."""
-        if name in self._adj.keys():
-            assert self._adj[name] is None, "{} must be unset".format(name)
+    def _needs_not(self, sym):
+        """Verify that sym is currently not assigned."""
+        if sym in self._adj.keys():
+            assert self._adj[sym] is None, "{} must be unset".format(sym)
         else:
-            assert name not in self._adj.keys(), "Symbol '{}' already exists".format(name)
+            assert sym not in self._adj.keys(), "Symbol '{}' already exists".format(sym)
 
     def _needs_iter(self, thing):
         assert isinstance(thing, (list, tuple)), "Expected list or tuple"
@@ -203,7 +206,7 @@ class OpGraph(object):
         if isinstance(from_b, dict):
             return from_b
         else:
-            return self._properties[from_b]
+            return self.get_properties(from_b)
 
     def _inherit_first(self, *args):
         assert len(args)
@@ -214,19 +217,19 @@ class OpGraph(object):
         return self._inherit(args[-1])
 
     def _needs_same(self, a, b):
-        assert self._properties[a] == self._properties[b], "{} was not {}".format(
-            self._properties[a],
-            self._properties[b]
+        assert self.get_properties(a) == self.get_properties(b), "{} was not {}".format(
+            self.get_properties(a),
+            self.get_properties(b)
         )
 
     def _needs_all_unique(self, syms):
         assert len(set(syms)) == len(syms), "All of {} must be unique".format(syms)
 
     def _needs_properties(self, a, properties):
-        assert self._properties[a] == properties
+        assert self.get_properties(a) == properties
 
     def _needs_same_dim(self, a, b):
-        assert self._properties[a]['dim'] == self._properties[b]['dim']
+        assert self.get_properties(a)['dim'] == self.get_properties(b)['dim']
 
     def _needs_type(self, a, sym_types):
         if isinstance(sym_types, tuple):
@@ -235,12 +238,12 @@ class OpGraph(object):
             assert self._type(a) == sym_types
 
     def _needs_valid_liegroup(self, kind):
-        assert kind in VALID_LIEGROUPS
+        assert kind in op_defs.VALID_LIEGROUPS
 
     def _signature_exists(self, name, arguments):
         if name not in self._subgraph_functions.keys():
             return False
-        arg_props = tuple(map(self.properties.get, arguments))
+        arg_props = tuple(map(self.get_properties, arguments))
         for func in self._subgraph_functions[name]:
             if arg_props == func['args']:
                 return True
@@ -254,7 +257,7 @@ class OpGraph(object):
                 return func
 
     def derivative_type(self, sym):
-        sym_prop = self._properties[sym]
+        sym_prop = self.get_properties(sym)
 
         # It's a lambda so it doesn't evaluate unless dispatched
         outcome_types = {
@@ -266,7 +269,7 @@ class OpGraph(object):
         return outcome_types[self._type(sym)]()
 
     def exp_type(self, sym):
-        sym_prop = self._properties[sym]
+        sym_prop = self.get_properties(sym)
         self._needs_type(sym, 'vector')
         assert sym_prop['dim'] in (3, 6)
         if sym_prop['dim'] == 3:
@@ -277,8 +280,8 @@ class OpGraph(object):
     def _needs_valid_derivative_type(self, sym, dsym):
         """Returns True if dsym can be the derivative of sym."""
         required_derivative_type = self.derivative_type(sym)
-        assert self._properties[dsym] == required_derivative_type, "{} should have been {}".format(
-            self.properties[dsym],
+        assert self.get_properties(dsym) == required_derivative_type, "{} should have been {}".format(
+            self.get_properties(dsym),
             required_derivative_type
         )
 
@@ -293,7 +296,7 @@ class OpGraph(object):
 
         if sym in up_to:
             self._adj[sym] = None
-            self._properties[sym] = gr.properties[sym]
+            self._properties[sym] = gr.get_properties(sym)
             return
 
         for o_sym in get_args(gr.adj[sym]):
@@ -303,7 +306,7 @@ class OpGraph(object):
             self._needs_not(sym)
 
         self._adj[sym] = gr._adj[sym]
-        self._properties[sym] = gr._properties[sym]
+        self._properties[sym] = gr.get_properties(sym)
 
     def insert_subgraph(self, gr, sym, up_to=[]):
         """This allows overriding existing symbols."""
@@ -319,7 +322,7 @@ class OpGraph(object):
     def insert_subgraph_as_function(self, name, gr, output_sym, up_to=[], input_order=[]):
         grx = gr.extract_subgraph(output_sym, up_to=up_to)
         for inp in set(input_order) - set(grx.adj.keys()):
-            grx.emplace(inp, gr.properties[inp])
+            grx.emplace(inp, gr.get_properties(inp))
         # grx.mimic_graph(gr)
         grx._copy_functions(gr)
         self.add_graph_as_function(name, grx, output_sym, input_order=input_order)
@@ -351,7 +354,7 @@ class OpGraph(object):
         props = []
         for sym in syms:
             self._needs_input(sym)
-            props.append(self._properties[sym])
+            props.append(self.get_properties(sym))
 
         group_prop = op_defs.create_group(props, names=self._default_list(syms, names), inherent_type=inherent_type)
         self.emplace(pregroup_name, group_prop)
@@ -363,6 +366,9 @@ class OpGraph(object):
     #
 
     def is_constant(self, name):
+        if isinstance(name, op_defs.Constant):
+            return True
+
         if name in self._adj:
             if self._adj[name] is None:
                 return False
@@ -377,6 +383,9 @@ class OpGraph(object):
         self._adj[name] = None
         self._properties[name] = properties
         return name
+
+    def mimic_constant(self, mimic_sym, value):
+        return op_defs.Constant(self.get_properties(mimic_sym), value)
 
     def constant_scalar(self, name, value):
         self._adj[name] = self._op('I', value)
@@ -404,7 +413,7 @@ class OpGraph(object):
         self._needs_iter(input_order)
         self._copy_types(graph)
 
-        returns = graph.properties[output_sym]
+        returns = graph.get_properties(output_sym)
         graph._needs(output_sym)
 
         graph_inputs = get_inputs(graph)
@@ -421,9 +430,9 @@ class OpGraph(object):
         args = []
         input_map = []
         for inp in real_input_order:
-            args.append(graph.properties[inp])
+            args.append(graph.get_properties(inp))
             input_map.append(inp)
-            simplified_graph.emplace(inp, graph.properties[inp])
+            simplified_graph.emplace(inp, graph.get_properties(inp))
 
         args = tuple(args)
 
@@ -468,7 +477,7 @@ class OpGraph(object):
         assert func in self._functions.keys(), "{} not known".format(func)
         overloaded_funcs = self._functions[func]
 
-        arg_props = tuple([self._properties[arg] for arg in args])
+        arg_props = tuple([self.get_properties(arg) for arg in args])
 
         for function in overloaded_funcs:
             if function['args'] == arg_props:
@@ -506,7 +515,7 @@ class OpGraph(object):
         properties = []
         for sym in syms:
             self._needs(sym)
-            properties.append(self._properties[sym])
+            properties.append(self.get_properties(sym))
 
         if inherent_type in self._group_types:
             names = self._group_types[inherent_type]['names']
@@ -523,9 +532,9 @@ class OpGraph(object):
     def extend_group(self, new_group_sym, old_group_sym, new_syms=[]):
         self._needs_not(new_group_sym)
         new_properties = []
-        old_properties = self._properties[old_group_sym]['elements']
+        old_properties = self.get_properties(old_group_sym)['elements']
         new_properties.extend(old_properties)
-        new_properties.extend(map(self._properties.get(new_syms)))
+        new_properties.extend(map(self.get_properties, new_syms))
         self._adj[new_group_sym] = self._op('extend_group', old_group_sym, *new_syms)
         self._properties[new_group_sym] = op_defs.create_group(new_properties)
         return new_group_sym
@@ -534,7 +543,7 @@ class OpGraph(object):
         self._needs_not(new_group_sym)
         new_properties = []
         for group in sym_groups:
-            old_properties = self._properties[group]
+            old_properties = self.get_properties(group)
             self._needs_type(group, 'group')
             new_properties.extend(old_properties['elements'])
 
@@ -544,7 +553,7 @@ class OpGraph(object):
 
     def extract(self, sym, group_sym, index):
         self._needs_not(sym)
-        props = self._properties[group_sym]
+        props = self.get_properties(group_sym)
         elements = props['elements']
         assert len(elements) > index
 
@@ -564,7 +573,7 @@ class OpGraph(object):
         raise NotImplementedError()
         op = self._adj[sym]
         if op is None:
-            into_gr.emplace(sym, self._properties[sym])
+            into_gr.emplace(sym, self.self.get_properties(sym))
             expanded[sym]
             return
 
@@ -572,7 +581,7 @@ class OpGraph(object):
             return
 
         if self._type(sym) == 'group':
-            for n, sub_property in enumerate(self._properties[sym]['elements']):
+            for n, sub_property in enumerate(self.get_properties(sym)['elements']):
                 new_sym = self.unique(prefix=sym + "{}".format(n))
                 expanded[sym].append(new_sym)
                 into_gr.emplace(new_sym, sub_property)
@@ -611,15 +620,15 @@ class OpGraph(object):
         subthings = []
         for arg in args:
             if self._type(arg) == 'group':
-                subthings.append(self._properties[arg][field][n])
+                subthings.append(self.get_properties(arg)[field][n])
             else:
-                subthings.append(self._properties[arg])
+                subthings.append(self.get_properties(arg))
         return subthings
 
     def _broadcast_properties_lon(self, arg, field, nargs):
         subthings = []
         if self._type(arg) == 'group':
-            subthings = self._properties[arg][field]
+            subthings = self.get_properties(arg)[field]
         else:
             return tuple()
         return tuple(subthings)
@@ -628,24 +637,24 @@ class OpGraph(object):
         n_args = None
         for arg in args:
             if (n_args is not None) and (self._type(arg) == 'group'):
-                assert len(self._properties[arg]['elements']) == n_args
+                assert len(self.get_properties(arg)['elements']) == n_args
             if self._type(arg) == 'group':
-                n_args = len(self._properties[arg]['elements'])
+                n_args = len(self.get_properties(arg)['elements'])
 
         assert n_args is not None
         return n_args
 
     def _infer_output_group_type(self, outputs, args):
         n_args = self._count_args_broadcasted(args)
-        output_props = map(self.properties.get, outputs)
+        output_props = map(self.get_properties, outputs)
         group_props = map(lambda o: self._broadcast_properties_lon(o, 'elements', n_args), args)
 
         inherent_type = None
         field_names = []
         if tuple(output_props) in group_props:
             ind = group_props.index(tuple(output_props))
-            inherent_type = self._properties[args[ind]]['inherent_type']
-            field_names = self._properties[args[ind]]['names']
+            inherent_type = self.get_properties(args[ind])['inherent_type']
+            field_names = self.get_properties(args[ind])['names']
 
         return field_names, inherent_type
 
@@ -663,7 +672,7 @@ class OpGraph(object):
         gr.mimic_graph(self)
 
         for arg in args:
-            gr.emplace(arg, self._properties[arg])
+            gr.emplace(arg, self.get_properties(arg))
         n_args = self._count_args_broadcasted(args)
 
         outputs = []
@@ -672,7 +681,7 @@ class OpGraph(object):
             op_arguments = []
             for k, prop in enumerate(properties):
                 if self._type(args[k]) == 'group':
-                    element_name = self._properties[args[k]]['names'][n]
+                    element_name = self.get_properties(args[k])['names'][n]
                     op_arguments.append(gr.extract(gr.anon(), args[k], n))
                 else:
                     # "Broadcast" if it's not a group
@@ -687,7 +696,7 @@ class OpGraph(object):
 
         if not self._signature_exists(op_name, args):
             self.add_graph_as_function(op_name, gr, output_group, input_order=args)
-        return gr._properties[output_group]
+        return gr.get_properties(output_group)
 
     def _call_group(self, op_name, new, *args):
         """Call a function on a group.
@@ -730,6 +739,9 @@ class OpGraph(object):
             self._properties[new] = real_func['returns'](*args)
         return new
 
+    def apply_s_expression(self, expr):
+        pass
+
     def forward_mode_differentiate(self, wrt):
         """Differentiate the graph with respect to wrt
 
@@ -743,7 +755,10 @@ class OpGraph(object):
         diffed = {}
 
         for inp in get_inputs(self):
-            diffed[inp] = 0
+            # diffed[inp] = op_defs.Constant(op_defs.create_scalar(), 0)
+            diffed[inp] = self.mimic_constant(inp, 0)
+
+        diffed[wrt] = self.mimic_constant(wrt, 1)
 
         while(len(to_diff)):
             td = to_diff.popleft()
@@ -751,7 +766,7 @@ class OpGraph(object):
             Log.debug(inv_adj[td])
 
             if td == wrt:
-                diffed[td] = 1
+                diffed[td] = op_defs.Constant(self.get_properties(td), 1)
                 continue
 
             op = self._adj[td]
@@ -768,8 +783,11 @@ class OpGraph(object):
                     u_sym = args[n]
 
                     Log.warn('d{}/d{}'.format(td, u_sym), df_du)
-                    du_dx = diffed[args[n]]
-                    df_dx.append(('mul', df_du, du_dx))
+                    if self.is_constant(args[n]):
+                        du_dx = op_defs.Constant(self.get_properties(args[n]), 'zero')
+                    else:
+                        du_dx = diffed[args[n]]
+                    df_dx.append(('mul', (df_du, du_dx)))
 
                 def summen(*a):
                     return ('add', tuple(a))
@@ -785,7 +803,7 @@ class OpGraph(object):
         self._needs(a)
         self._needs_valid_liegroup(a)
         self._adj[sym_new] = self._op('log', a)
-        a_prop = self._properties[a]
+        a_prop = self.get_properties(a)
         self._properties[sym_new] = op_defs.create_vector(a_prop['algebra_dim'])
         return sym_new
 
@@ -810,7 +828,7 @@ class OpGraph(object):
     def identity(self, new_sym, sym):
         self._needs(sym)
         self._needs_not(new_sym)
-        self._properties[new_sym] = self._properties[sym]
+        self._properties[new_sym] = self.get_properties(sym)
         self._adj[new_sym] = self._op('I', sym)
         return new_sym
 
@@ -862,12 +880,12 @@ class OpGraph(object):
             return "({})".format(self.op_to_text(self._adj[sym]))
 
         sym_type = self._type(sym)
-        sym_prop = self._properties[sym]
+        sym_prop = self.get_properties(sym)
 
         if sym_type == 'vector':
             text = "{}[{}]".format(
                 sym,
-                self._properties[sym]['dim']
+                sym_prop['dim']
             )
         elif sym_type == 'scalar':
                 text = "{}".format(sym)
@@ -949,7 +967,7 @@ def difftest():
     gr.scalar('x1')
     gr.scalar('x2')
 
-    gr.mul('a', 'x1', 'x2')
+    gr.mul('a', 'x1', op_defs.Constant(op_defs.create_scalar(), 'I'))
     gr.mul('b', 'a', 'x1')
     gr.add('c', 'a', 'b')
 

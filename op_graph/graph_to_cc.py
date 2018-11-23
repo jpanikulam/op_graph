@@ -93,7 +93,7 @@ def func(sym, gr):
 
 def exp(sym, gr):
     args = graph.get_args(gr.adj[sym])
-    result_type = gr.properties[sym]['subtype']
+    result_type = gr.get_properties(sym)['subtype']
     return "{}::exp({})".format(result_type, sym_to_text(args[0], gr=gr))
 
 
@@ -103,14 +103,14 @@ def extract(sym, gr):
     assert isinstance(args[1], int), "Oh shit what are you doing"
     struct_name = args[0]
     ind = args[1]
-    field_name = gr.properties[struct_name]['names'][ind]
+    field_name = gr.get_properties(struct_name)['names'][ind]
     return "{}.{}".format(struct_name, field_name)
 
 
 def build_struct(sym, gr):
     op = gr.adj[sym]
     args = graph.get_args(op)
-    props = gr.properties[sym]
+    props = gr.get_properties(sym)
 
     if props['inherent_type'] is None:
         Log.warn("{} lacks inherent type".format(sym))
@@ -122,7 +122,7 @@ def build_struct(sym, gr):
 def inv(sym, gr):
     op = gr.adj[sym]
     args = graph.get_args(op)
-    arg_type = gr.properties[args[0]]
+    arg_type = gr.get_properties(args[0])
     if arg_type == 'liegroup':
         return "{}.inverse()".format(sym_to_text(args[0], gr))
     else:
@@ -181,7 +181,7 @@ def graph_to_impl(gr, output):
         op = gr.adj[sym]
 
         if op is not None:
-            sym_prop = gr.properties[sym]
+            sym_prop = gr.get_properties(sym)
             cpp_type = to_cpp_type(sym_prop)
             decl = "const {type} {name}".format(
                 type=cpp_type,
@@ -205,7 +205,7 @@ def to_cc_function(func_name, graph_func, code_graph):
     inputs = graph_func['input_names']
 
     lvalues = []
-    types = map(gr.properties.get, inputs)
+    types = map(gr.get_properties, inputs)
 
     for _type, name in zip(types, inputs):
         cc_type = to_cpp_type(_type)
