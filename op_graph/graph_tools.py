@@ -48,6 +48,16 @@ def topological_sort(adj):
     return result
 
 
+def mimic_order(to_sort, mimic_this):
+    to_sort_set = set(to_sort)
+    assert len(to_sort_set - set(mimic_this)) == 0
+    new_list = []
+    for item in mimic_this:
+        if item in to_sort_set:
+            new_list.append(item)
+    return new_list
+
+
 def test_topological_sort():
     test = {
         'a': ('dep', ('b', 'd')),
