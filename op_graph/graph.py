@@ -217,6 +217,19 @@ class OpGraph(object):
         assert len(args)
         return self._inherit(args[-1])
 
+    def _matrix_mul_type(self, a, b):
+        dim_a = self.get_properties(a)['dim']
+        dim_b = self.get_properties(b)['dim']
+        return op_defs.create_matrix((dim_a[0], dim_b[1]))
+
+    def _needs_valid_matmul(self, a, b):
+        dim_a = self.get_properties(a)['dim']
+        dim_b = self.get_properties(b)['dim']
+        assert dim_a[1] == dim_b[0]
+
+    def _needs_vector(self, a):
+        assert self.get_properties(a)['dim'][1] == 1
+
     def _needs_same(self, a, b):
         assert self.get_properties(a) == self.get_properties(b), "{} was not {}".format(
             self.get_properties(a),
@@ -241,6 +254,9 @@ class OpGraph(object):
     def _needs_valid_liegroup(self, kind):
         assert kind in op_defs.VALID_LIEGROUPS
 
+    def _needs_constant(self, a):
+        assert self.is_constant(a)
+
     def _signature_exists(self, name, arguments):
         if name not in self._subgraph_functions.keys():
             return False
@@ -262,7 +278,7 @@ class OpGraph(object):
 
         # It's a lambda so it doesn't evaluate unless dispatched
         outcome_types = {
-            'vector': lambda: self._inherit(sym),
+            'matrix': lambda: (self._needs_vector(sym), self._inherit(sym))[1],
             'scalar': lambda: self._inherit(sym),
             'liegroup': lambda: op_defs.create_vector(sym_prop['algebra_dim']),
         }
@@ -271,9 +287,9 @@ class OpGraph(object):
 
     def exp_type(self, sym):
         sym_prop = self.get_properties(sym)
-        self._needs_type(sym, 'vector')
-        assert sym_prop['dim'] in (3, 6)
-        if sym_prop['dim'] == 3:
+        self._needs_vector(sym)
+        assert sym_prop['dim'] in ((3, 1), (6, 1))
+        if sym_prop['dim'] == (3, 1):
             return op_defs.create_liegroup('SO3')
         else:
             return op_defs.create_liegroup('SE3')
@@ -389,6 +405,12 @@ class OpGraph(object):
         self._adj[name] = None
         self._properties[name] = properties
         return name
+
+    def identity_like(self, mimic_sym):
+        return self.constant_like(mimic_sym, 'I')
+
+    def zeros_like(self, mimic_sym):
+        return self.constant_like(mimic_sym, 0)
 
     def constant_like(self, mimic_sym, value):
         return op_defs.Constant(self.get_properties(mimic_sym), value)
@@ -801,9 +823,6 @@ class OpGraph(object):
                     df_du_sexpr = df_darg['generate'](*args)
                     df_du_sym = self.anon()
                     s_expressions.apply_s_expression(self, df_du_sexpr, df_du_sym)
-
-                    Log.warn("Arg: {}".format(args[n]))
-                    Log.warn(diffed)
                     if self.is_constant(args[n]):
                         du_dx = op_defs.Constant(self.get_properties(args[n]), 'zero')
                     else:
@@ -919,7 +938,7 @@ class OpGraph(object):
         sym_type = self._type(sym)
         sym_prop = self.get_properties(sym)
 
-        if sym_type == 'vector':
+        if sym_type == 'matrix':
             text = "{}[{}]".format(
                 sym,
                 sym_prop['dim']

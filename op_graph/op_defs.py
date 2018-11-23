@@ -1,3 +1,15 @@
+def first(f):
+    return lambda a, b: f(a)
+
+
+def second(f):
+    return lambda a, b: f(b)
+
+
+def shortcut(value):
+    return lambda a, b: value
+
+
 def create_constant(value, properties):
     """TODO is this the right approach?"""
     properties['constant'] = True
@@ -14,12 +26,13 @@ def create_scalar():
 
 
 def create_vector(dim):
-    assert isinstance(dim, int)
-    prop = {
-        'type': 'vector',
-        'dim': dim
-    }
-    return prop
+    if isinstance(dim, int):
+        return create_matrix((dim, 1))
+    elif isinstance(dim, tuple) and len(dim) == 2:
+        assert dim[1] == 1
+        return create_matrix(dim)
+    else:
+        raise TypeError("Did not")
 
 
 def create_matrix(dim):
@@ -38,8 +51,8 @@ VALID_LIEGROUPS = []
 def create_liegroup(subtype):
     VALID_LIEGROUPS.append(subtype)
     mapping = {
-        'SO3': {'dim': 3, 'algebra_dim': 3},
-        'SE3': {'dim': 3, 'algebra_dim': 6},
+        'SO3': {'dim': (3, 1), 'algebra_dim': (3, 1)},
+        'SE3': {'dim': (3, 1), 'algebra_dim': (6, 1)},
     }
 
     default = {
@@ -151,6 +164,11 @@ def inv(gr):
             'needs': [],
             'inverse': 'inv'
         },
+        ('matrix',): {
+            'returns': gr._inherit_last,
+            'needs': [],
+            'inverse': 'inv'
+        },
         ('scalar',): {
             'returns': gr._inherit_last,
             'needs': [],
@@ -161,12 +179,13 @@ def inv(gr):
 
 def add(gr):
     return {
-        ('liegroup', 'vector'): {
+        ('liegroup', 'matrix'): {
             'returns': gr._inherit_first,
             'needs': [gr._needs_valid_derivative_type],
-            'generate': lambda n, a, b: gr._call('mul', n, gr._anony_call('exp', b), a)
+            'generate': lambda n, a, b: gr._call('mul', n, gr._anony_call('exp', b), a),
+            'properties': ['commutative', 'associative'],
         },
-        ('vector', 'vector'): {
+        ('matrix', 'matrix'): {
             'returns': gr._inherit_last,
             'needs': [gr._needs_same],
             'properties': ['commutative', 'associative'],
@@ -195,8 +214,8 @@ def dadd(gr):
             {'generate': lambda a, b: a / a}  # Must Fail
         ),
         ('vector', 'vector'): (
-            {'generate': lambda a, b: (gr.mtx_identity_for(a))},
-            {'generate': lambda a, b: (gr.mtx_identity_for(b))},
+            {'generate': lambda a, b: (gr.identity_like(a))},
+            {'generate': lambda a, b: (gr.identity_like(b))},
         ),
         ('scalar', 'scalar'): (
             {'generate': lambda a, b: Constant(create_scalar(), 1)},
@@ -210,7 +229,7 @@ def mul(gr):
     # How do we generate *template* types?
     # Eesh, does this mean we have to define a template system?
     return {
-        ('liegroup', 'vector'): {
+        ('liegroup', 'matrix'): {
             'returns': gr._inherit_last,
             'needs': [gr._needs_same_dim],
             'properties': [],
@@ -224,12 +243,25 @@ def mul(gr):
             # How do we define the identity for this thing?
             # 'identity': Constant(gr, create_liegroup())
         },
-        ('scalar', 'vector'): {
+        ('matrix', 'matrix'): {
+            'returns': gr._matrix_mul_type,
+            'needs': [gr._needs_valid_matmul],
+            'properties': ['associative'],
+            'inverse': 'inv',
+            'identity': (
+                lambda a, b: gr.identity_like(a),
+                lambda a, b: gr.identity_like(b),
+            )
+        },
+        ('scalar', 'matrix'): {
             'returns': gr._inherit_last,
             'needs': [],
-            'properties': ['commutative', 'associative'],
+            'properties': [],
             'inverse': 'inv',
-            'identity': 1,
+            'identity': (
+                lambda a, b: Constant(gr.get_properties(a), 1),
+                None,
+            ),
             'zero': 0,
         },
         ('scalar', 'scalar'): {
@@ -252,12 +284,13 @@ def mul(gr):
 def dmul(gr):
     """Generate derivatives for multiplication."""
     return {
-        ('liegroup', 'vector'): (
+        ('liegroup', 'matrix'): (
             {
                 'generate': lambda a, b: op('negate', op('skew', op('mul', a, b)))
             },
             {
-                'generate': lambda a, b: b
+                'generate': lambda a, b: b,
+                'needs': [gr._needs_vector],
             }
         ),
         ('liegroup', 'liegroup'): (
@@ -268,12 +301,24 @@ def dmul(gr):
                 'generate': lambda a, b: op('Adj', a)
             }
         ),
-        ('scalar', 'vector'): (
+        ('matrix', 'matrix'): (
+            {
+                # 'generate': lambda a, b: a
+                'generate': first(gr.zeros_like),
+                'needs': [first(gr._needs_constant)],
+            },
+            {
+                'generate': lambda a, b: op('mul', b, gr.identity_like(b)),
+                'needs': [second(gr._needs_vector)],
+            }
+        ),
+        ('scalar', 'matrix'): (
             {
                 'generate': lambda a, b: b
             },
             {
-                'generate': lambda a, b: op('mul', b, Constant(gr, 'matrix', 'identity'))
+                'generate': lambda a, b: op('mul', b, gr.identity_like(b)),
+                'needs': [second(gr._needs_vector)],
             }
         ),
         ('scalar', 'scalar'): (
@@ -290,7 +335,7 @@ def dmul(gr):
 
 def exp(gr):
     return {
-        ('vector',): {
+        ('matrix',): {
             'returns': gr.exp_type,
             'needs': []
         },

@@ -11,10 +11,17 @@ from copy import deepcopy
 import string
 
 
+def matrix_txt(props):
+    if props['dim'][1] == 1:
+        return 'VecNd<{}>'.format(props['dim'])
+    else:
+        return 'MatNd<{}, {}>'.format(*props['dim'])
+
+
 def to_cpp_type(properties):
     choices = {
         'liegroup': lambda: properties['subtype'],
-        'vector': lambda: 'VecNd<{}>'.format(properties['dim']),
+        'matrix': lambda: matrix_txt(properties),
         'scalar': lambda: 'double',
         'group': lambda: properties['inherent_type']
     }

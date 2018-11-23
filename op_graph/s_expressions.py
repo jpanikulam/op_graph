@@ -77,7 +77,7 @@ def simplify(gr):
 
         if op[0] in ['mul', 'add']:
             apply_binary_simplification(gr, sym)
-        # elif op[0] in ['I']:
-            # scrub_identity(gr, sym)
+        elif op[0] in ['I']:
+            scrub_identity(gr, sym)
 
     scrub_anonymous(gr)
