@@ -13,6 +13,13 @@ import op_defs
 #
 
 
+def get_opname(op):
+    if op is not None:
+        return op[0]
+    else:
+        return None
+
+
 def get_args(op):
     if op is not None:
         return op[1]
@@ -384,7 +391,7 @@ class OpGraph(object):
         self._properties[name] = properties
         return name
 
-    def mimic_constant(self, mimic_sym, value):
+    def constant_like(self, mimic_sym, value):
         return op_defs.Constant(self.get_properties(mimic_sym), value)
 
     def constant_scalar(self, name, value):
@@ -739,8 +746,22 @@ class OpGraph(object):
             self._properties[new] = real_func['returns'](*args)
         return new
 
-    def apply_s_expression(self, expr):
-        pass
+    def simplify(self):
+        import s_expressions
+        s_expressions.simplify(self)
+
+    def replace(self, from_sym, to_sym):
+        """Set sym1 exactly equal to sym2."""
+        self._needs_same(from_sym, to_sym)
+
+        # Think more about guarding against modification during iteration
+        while(len(self._inverse_adjacency()[from_sym])):
+            ref = self._inverse_adjacency()[from_sym][0]
+            old_op = self._adj[ref]
+            new_args = list(get_args(old_op))
+            ind = new_args.index(from_sym)
+            new_args[ind] = to_sym
+            self._adj[ref] = self._op(get_opname(old_op), *new_args)
 
     def forward_mode_differentiate(self, wrt):
         """Differentiate the graph with respect to wrt
@@ -748,6 +769,8 @@ class OpGraph(object):
         "wrt" -> "w.r.t" -> "with respect to" in case you are a goober
         """
         from collections import deque
+        import s_expressions
+
         self._needs_input(wrt)
         inv_adj = self._inverse_adjacency()
 
@@ -755,18 +778,19 @@ class OpGraph(object):
         diffed = {}
 
         for inp in get_inputs(self):
-            # diffed[inp] = op_defs.Constant(op_defs.create_scalar(), 0)
-            diffed[inp] = self.mimic_constant(inp, 0)
+            diffed[inp] = self.constant_like(inp, 0)
 
-        diffed[wrt] = self.mimic_constant(wrt, 1)
+        diffed[wrt] = self.constant_like(wrt, 1)
 
         while(len(to_diff)):
             td = to_diff.popleft()
             to_diff.extend(inv_adj[td])
-            Log.debug(inv_adj[td])
 
             if td == wrt:
                 diffed[td] = op_defs.Constant(self.get_properties(td), 1)
+                continue
+
+            if td in diffed.keys():
                 continue
 
             op = self._adj[td]
@@ -779,25 +803,34 @@ class OpGraph(object):
                 df_dx = []
                 for n, df_darg in enumerate(df):
 
-                    df_du = df_darg['generate'](*args)
+                    df_du_sexpr = df_darg['generate'](*args)
                     u_sym = args[n]
 
-                    Log.warn('d{}/d{}'.format(td, u_sym), df_du)
+                    df_du = 'd{}_d{}'.format(td, u_sym)
+                    Log.warn("Writing: ", df_du)
+
+                    s_expressions.apply_s_expression(self, df_du_sexpr, df_du)
+
                     if self.is_constant(args[n]):
                         du_dx = op_defs.Constant(self.get_properties(args[n]), 'zero')
                     else:
                         du_dx = diffed[args[n]]
-                    df_dx.append(('mul', (df_du, du_dx)))
+                    df_dx.append(self._anony_call('mul', df_du, du_dx))
 
-                def summen(*a):
-                    return ('add', tuple(a))
-
-                total = reduce(summen, df_dx)
+                total = self.reduce_binary_op('add', 'df_dx', df_dx)
 
                 diffed[td] = total
-                Log.warn("d{}/d{}".format(td, wrt), total)
 
         print self
+        self.simplify()
+        print self
+
+    def reduce_binary_op(self, op, name, args):
+        prev = args[0]
+        for arg in args[1:-1]:
+            prev = self._call(op, self.anon(), prev, arg)
+        print prev, args[-1]
+        return self._call(op, name, prev, args[-1])
 
     def log(self, sym_new, a, kind=None):
         self._needs(a)
@@ -931,6 +964,9 @@ class OpGraph(object):
         - Use tabbing to express dependency depth
             (Some symbols are at different dependency depths for multiple things)
         """
+
+        inv_adj = self._inverse_adjacency()
+
         total_text = ""
         top_sort = topological_sort(self._adj)
         for sym in top_sort:
@@ -942,8 +978,11 @@ class OpGraph(object):
                 total_text += '-> {}\n'.format(self.symbol_to_text(sym))
                 continue
 
+            # Generally, ignore uniques
             if sym in self._uniques:
-                continue
+                # BUT, always print them if nothing depends on them
+                if len(inv_adj[sym]) != 0:
+                    continue
 
             text = self.op_to_text(op)
             total_text += "{} <- {}\n".format(self.symbol_to_text(sym), text)
@@ -968,10 +1007,11 @@ def difftest():
     gr.scalar('x2')
 
     gr.mul('a', 'x1', op_defs.Constant(op_defs.create_scalar(), 'I'))
-    gr.mul('b', 'a', 'x1')
-    gr.add('c', 'a', 'b')
+    # gr.mul('b', 'a', 'x1')
+    # gr.add('c', 'a', 'b')
 
     gr.forward_mode_differentiate('x1')
+    print gr
 
 
 if __name__ == '__main__':

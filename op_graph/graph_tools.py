@@ -1,4 +1,5 @@
 from collections import defaultdict
+from op_defs import Constant
 
 
 def _debug(depth, *text):
@@ -10,6 +11,9 @@ def _debug(depth, *text):
 
 
 def maybe_insert_deps(adj, visited, key, output, depth=0):
+    if isinstance(key, Constant):
+        return
+
     if key in adj.keys():
         _debug(depth, "We have {}".format(key))
         if adj[key] is not None:

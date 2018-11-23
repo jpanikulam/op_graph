@@ -95,7 +95,7 @@ class Constant(object):
         valid_special_values = {
             'matrix': ('I', 'zero'),
             'liegroup': ('I'),
-            'vector': ('zero', 'ones'),
+            'vector': ('Zero', 'ones'),
             'scalar': ('I', 'zero'),
         }
 
@@ -121,11 +121,16 @@ class Constant(object):
     def value(self):
         return self._value
 
+    def __eq__(self, other):
+        if not isinstance(other, Constant):
+            return False
+        return self._properties == other._properties and self._value == other._value
+
     def __str__(self):
-        return "Constant[{}]".format(self._value)
+        return str(self._value)
 
     def __repr__(self):
-        return "Constant[{}]".format(self._value)
+        return str(self._value)
 
 
 def op(name, *args):
@@ -225,8 +230,14 @@ def mul(gr):
             'needs': [gr._needs_same],
             'properties': ['commutative', 'associative'],
             'inverse': 'inv',
-            'identity': 1,
-            'zero': 0,
+            'identity': (
+                lambda a, b: Constant(gr.get_properties(a), 1),
+                lambda a, b: Constant(gr.get_properties(b), 1),
+            ),
+            'zero': (
+                lambda a, b: Constant(gr.get_properties(a), 0),
+                lambda a, b: Constant(gr.get_properties(b), 0),
+            ),
         },
     }
 
@@ -281,3 +292,12 @@ def exp(gr):
             'needs': []
         }
     }
+
+
+def main():
+    a = Constant(create_scalar(), 'I')
+    b = Constant(create_scalar(), 'I')
+    assert a == b
+
+if __name__ == '__main__':
+    main()
