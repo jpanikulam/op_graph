@@ -70,15 +70,8 @@ class OpGraph(object):
 
         self._group_types = {}
 
-        self._op_table = {}
-        self._op_table['mul'] = op_defs.mul(self)
-        self._op_table['add'] = op_defs.add(self)
-        self._op_table['inv'] = op_defs.inv(self)
-        self._op_table['exp'] = op_defs.exp(self)
-
-        self._d_table = {}
-        self._d_table['mul'] = op_defs.dmul(self)
-        self._d_table['add'] = op_defs.dadd(self)
+        self._op_table = op_defs.op_table(self)
+        self._d_table = op_defs.d_table(self)
 
     def __getattr__(self, key):
         if key in self._op_table.keys():

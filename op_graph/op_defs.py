@@ -71,13 +71,20 @@ def create_SE3():
     return create_liegroup('SE3')
 
 
-def create_ops(gr):
+def op_table(gr):
     """TODO: Use this instead of anything else."""
-    {
+    return {
         'inv': inv(gr),
         'mul': mul(gr),
         'add': add(gr),
         'exp': exp(gr),
+    }
+
+
+def d_table(gr):
+    return {
+        'mul': dmul(gr),
+        'add': dadd(gr),
     }
 
 
