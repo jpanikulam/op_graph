@@ -77,6 +77,16 @@ for verbosity, color in Log._verbosities.items():
     setattr(Log, verbosity, classmethod(make_logger(verbosity, color)))
 
 
+def argparser():
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-v', '--verbosity', type=str, default='success')
+    args = parser.parse_args()
+    Log.set_verbosity(args.verbosity)
+
+argparser()
+
+
 if __name__ == '__main__':
     Log.error("error:", 0)
     Log.warn("warn:", 1)
