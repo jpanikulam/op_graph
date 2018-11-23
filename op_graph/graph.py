@@ -1,7 +1,7 @@
 """Graph tools for CPY
 """
 from functools import partial
-from graph_tools import topological_sort
+from graph_tools import topological_sort, mimic_order
 from collections import defaultdict, deque
 import s_expressions
 
@@ -63,6 +63,7 @@ class OpGraph(object):
 
         # What we're optimizing
         self._to_optimize = set()
+        self._outputs = set()
 
         # A convenience for naming
         self._uniques = set()
@@ -330,16 +331,21 @@ class OpGraph(object):
         grx = gr.extract_subgraph(output_sym, up_to=up_to)
         for inp in set(input_order) - set(grx.adj.keys()):
             grx.emplace(inp, gr.get_properties(inp))
-        # grx.mimic_graph(gr)
         grx._copy_functions(gr)
         self.add_graph_as_function(name, grx, output_sym, input_order=input_order)
 
     def _inverse_adjacency(self):
+        topso = topological_sort(self._adj)
+
         inv_adjacency = defaultdict(list)
         for sym, op in self._adj.items():
             inv_adjacency[sym]
             for arg in get_args(op):
                 inv_adjacency[arg].append(sym)
+
+        for k, v in inv_adjacency.items():
+            inv_adjacency[k] = mimic_order(v, topso)
+
         return inv_adjacency
 
     def what_depends_on(self, sym):
@@ -709,7 +715,6 @@ class OpGraph(object):
         """Call a function on a group.
 
         TODO:
-            - Eliminate _maybe_generate_group_func
             - Eliminate normal _call (I think this can contain it!)
         """
         # new_group_props = self._maybe_generate_group_func(op_name, new, *args)
@@ -777,6 +782,7 @@ class OpGraph(object):
         """
         self._needs_input(wrt)
         inv_adj = self._inverse_adjacency()
+
         to_diff = deque([wrt])
         diffed = {}
         for inp in get_inputs(self):
@@ -786,7 +792,6 @@ class OpGraph(object):
         while(len(to_diff)):
             td = to_diff.popleft()
             to_diff.extend(inv_adj[td])
-
             if td == wrt:
                 diffed[td] = op_defs.Constant(self.get_properties(td), 1)
                 continue
@@ -798,29 +803,35 @@ class OpGraph(object):
                 args = get_args(op)
                 arg_types = self._types(args)
                 df = self._d_table[get_opname(op)][arg_types]
-                df_dx = []
+                df_dx_summands = []
                 for n, df_darg in enumerate(df):
                     df_du_sexpr = df_darg['generate'](*args)
-                    u_sym = args[n]
+                    df_du_sym = self.anon()
+                    s_expressions.apply_s_expression(self, df_du_sexpr, df_du_sym)
 
-                    df_du = 'd{}_d{}'.format(td, u_sym)
-                    s_expressions.apply_s_expression(self, df_du_sexpr, df_du)
-
+                    Log.warn("Arg: {}".format(args[n]))
+                    Log.warn(diffed)
                     if self.is_constant(args[n]):
                         du_dx = op_defs.Constant(self.get_properties(args[n]), 'zero')
                     else:
                         du_dx = diffed[args[n]]
-                    df_dx.append(self._anony_call('mul', df_du, du_dx))
+                    df_dx_summands.append(self._anony_call('mul', df_du_sym, du_dx))
 
-                total = self.reduce_binary_op('add', 'df_dx', df_dx)
+                if td in self._outputs:
+                    df_dx_sym = 'd{}_d{}'.format(td, wrt)
+                else:
+                    df_dx_sym = self.anon()
 
+                if df_dx_sym not in self._adj:
+                    total = self.reduce_binary_op('add', df_dx_sym, df_dx_summands)
+                else:
+                    total = df_dx_sym
                 diffed[td] = total
 
     def reduce_binary_op(self, op, name, args):
         prev = args[0]
         for arg in args[1:-1]:
             prev = self._call(op, self.anon(), prev, arg)
-        print prev, args[-1]
         return self._call(op, name, prev, args[-1])
 
     def log(self, sym_new, a, kind=None):
@@ -865,6 +876,15 @@ class OpGraph(object):
             self._needs(syms)
             self._to_optimize.add(syms)
 
+    def output(self, syms):
+        if isinstance(syms, (list, tuple)):
+            for sym in syms:
+                self._needs(sym)
+                self._outputs.add(sym)
+        else:
+            self._needs(syms)
+            self._outputs.add(syms)
+
     #
     # Printing and Visualization
     #
@@ -901,7 +921,7 @@ class OpGraph(object):
 
     def symbol_to_text(self, sym, skip_uniques=False):
         if skip_uniques and sym in self._uniques:
-            return "({})".format(self.op_to_text(self._adj[sym]))
+            return "({})".format(self.op_to_text(self._adj[sym], skip_uniques=skip_uniques))
 
         sym_type = self._type(sym)
         sym_prop = self.get_properties(sym)
@@ -929,26 +949,23 @@ class OpGraph(object):
         return text
 
     def op_to_text(self, op, skip_uniques=True):
+        sym_to_txt = partial(self.symbol_to_text, skip_uniques=skip_uniques)
+
         op_name = get_opname(op)
         args = op[1]
         do = {
-            'add': lambda o: "{} + {}".format(
-                self.symbol_to_text(args[0], skip_uniques),
-                self.symbol_to_text(args[1], skip_uniques)
-            ),
-            'mul': lambda o: "{} * {}".format(
-                self.symbol_to_text(args[0], skip_uniques),
-                self.symbol_to_text(args[1], skip_uniques)
-            ),
-            'time_antiderivative': lambda o: "\\int({})".format(self.symbol_to_text(args[0], skip_uniques)),
-            'inv': lambda o: "{}^-1".format(self.symbol_to_text(args[0], skip_uniques)),
+            'add': lambda o: "{} + {}".format(sym_to_txt(args[0]), sym_to_txt(args[1])),
+            'mul': lambda o: "{} * {}".format(sym_to_txt(args[0]), sym_to_txt(args[1])),
+            'time_antiderivative': lambda o: "\\int({})".format(sym_to_txt(args[0])),
+            'inv': lambda o: "{}^-1".format(sym_to_txt(args[0])),
+            'I': lambda o: "{}".format(sym_to_txt(args[0])),
             'null': lambda o: 'null()',
         }
 
         def alt(operation):
             op_name = operation[0]
             args = operation[1]
-            return "{}({})".format(op_name, ', '.join(map(str, args)))
+            return "{}({})".format(op_name, ', '.join(map(sym_to_txt, args)))
 
         text = do.get(op_name, alt)(op)
         return text
@@ -961,7 +978,6 @@ class OpGraph(object):
         - Use tabbing to express dependency depth
             (Some symbols are at different dependency depths for multiple things)
         """
-
         inv_adj = self._inverse_adjacency()
 
         total_text = ""
@@ -1003,19 +1019,21 @@ def difftest():
     gr.scalar('x1')
     gr.scalar('x2')
 
-    gr.mul('a', 'x1', op_defs.Constant(op_defs.create_scalar(), 'I'))
-    # gr.mul('b', 'a', 'x1')
-    # gr.add('c', 'a', 'b')
+    a = gr.mul(gr.anon(), 'x1', op_defs.Constant(op_defs.create_scalar(), 'I'))
+    # a = gr.mul(gr.anon(), 'x1', 'x1')
+    b = gr.mul(gr.anon(), a, 'x1')
+    gr.add('c', b, 'x2')
+    gr.output('c')
 
     gr.forward_mode_differentiate('x1')
     print '--------\n\n'
-    print gr.arrows(skip_uniques=False)
+    print gr.arrows(skip_uniques=True)
     gr.simplify()
     print '\n'
-    print gr.arrows(skip_uniques=False)
+    print gr.arrows(skip_uniques=True)
 
     gr.simplify()
-    print gr.arrows(skip_uniques=False)
+    print gr.arrows(skip_uniques=True)
 
 
 if __name__ == '__main__':
