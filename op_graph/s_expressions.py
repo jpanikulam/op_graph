@@ -23,7 +23,7 @@ def apply_s_expression(gr, expr, final):
     return gr._call(op_name, name, *new_args)
 
 
-def apply_simplification(gr, sym):
+def apply_binary_simplification(gr, sym):
     op = gr._adj[sym]
     op_type = graph.get_opname(op)
     args = graph.get_args(op)
@@ -33,6 +33,9 @@ def apply_simplification(gr, sym):
     if 'zero' in this_op.keys():
         identities = this_op['zero']
         for n, (ident, arg) in enumerate(zip(identities, args)):
+            if ident is None:
+                continue
+
             if arg == ident(*args):
                 Log.debug("Shortcut: {} <- {}".format(sym, args[n]))
                 gr.replace(sym, args[n])
@@ -40,9 +43,19 @@ def apply_simplification(gr, sym):
     if 'identity' in this_op.keys():
         identities = this_op['identity']
         for n, (ident, arg) in enumerate(zip(identities, args)):
+            if ident is None:
+                continue
+
             if arg == ident(*args):
                 Log.debug("Shortcut: {} <- {}".format(sym, args[int(not n)]))
                 gr.replace(sym, args[int(not n)])
+
+
+def scrub_identity(gr, sym):
+    op = gr._adj[sym]
+    args = graph.get_args(op)
+    Log.debug("Shortcut: {} <- {}".format(sym, args[0]))
+    gr.replace(sym, args[0])
 
 
 def scrub_anonymous(gr):
@@ -63,6 +76,8 @@ def simplify(gr):
             continue
 
         if op[0] in ['mul', 'add']:
-            apply_simplification(gr, sym)
+            apply_binary_simplification(gr, sym)
+        # elif op[0] in ['I']:
+            # scrub_identity(gr, sym)
 
     scrub_anonymous(gr)
