@@ -1,9 +1,9 @@
 """Graph tools for CPY
 """
 from functools import partial
-
 from graph_tools import topological_sort
-from collections import defaultdict
+from collections import defaultdict, deque
+import s_expressions
 
 from log import Log
 import op_defs
@@ -594,7 +594,7 @@ class OpGraph(object):
                 into_gr.emplace(new_sym, sub_property)
                 self.sym_expand(into_gr, sym, expanded)
 
-        if op[0] in ('groupify', 'combine_groups', 'extract'):
+        if get_opname(op) in ('groupify', 'combine_groups', 'extract'):
             must_define = get_args(op)
             for must_def in must_define:
                 print "Must: ", must_def
@@ -747,12 +747,19 @@ class OpGraph(object):
         return new
 
     def simplify(self):
-        import s_expressions
         s_expressions.simplify(self)
+
+    def remove(self, sym):
+        self._adj.pop(sym)
+        self._properties.pop(sym)
+        self._uniques -= {sym}
 
     def replace(self, from_sym, to_sym):
         """Set sym1 exactly equal to sym2."""
         self._needs_same(from_sym, to_sym)
+
+        if(len(self._inverse_adjacency()[from_sym])) == 0:
+            self._adj[from_sym] = self._op('I', to_sym)
 
         # Think more about guarding against modification during iteration
         while(len(self._inverse_adjacency()[from_sym])):
@@ -768,18 +775,12 @@ class OpGraph(object):
 
         "wrt" -> "w.r.t" -> "with respect to" in case you are a goober
         """
-        from collections import deque
-        import s_expressions
-
         self._needs_input(wrt)
         inv_adj = self._inverse_adjacency()
-
         to_diff = deque([wrt])
         diffed = {}
-
         for inp in get_inputs(self):
             diffed[inp] = self.constant_like(inp, 0)
-
         diffed[wrt] = self.constant_like(wrt, 1)
 
         while(len(to_diff)):
@@ -789,7 +790,6 @@ class OpGraph(object):
             if td == wrt:
                 diffed[td] = op_defs.Constant(self.get_properties(td), 1)
                 continue
-
             if td in diffed.keys():
                 continue
 
@@ -797,18 +797,13 @@ class OpGraph(object):
             if op is not None:
                 args = get_args(op)
                 arg_types = self._types(args)
-
-                df = self._d_table[op[0]][arg_types]
-
+                df = self._d_table[get_opname(op)][arg_types]
                 df_dx = []
                 for n, df_darg in enumerate(df):
-
                     df_du_sexpr = df_darg['generate'](*args)
                     u_sym = args[n]
 
                     df_du = 'd{}_d{}'.format(td, u_sym)
-                    Log.warn("Writing: ", df_du)
-
                     s_expressions.apply_s_expression(self, df_du_sexpr, df_du)
 
                     if self.is_constant(args[n]):
@@ -820,10 +815,6 @@ class OpGraph(object):
                 total = self.reduce_binary_op('add', 'df_dx', df_dx)
 
                 diffed[td] = total
-
-        print self
-        self.simplify()
-        print self
 
     def reduce_binary_op(self, op, name, args):
         prev = args[0]
@@ -893,14 +884,14 @@ class OpGraph(object):
 
         if op is not None:
             sub_ops = tuple(map(self.how_do_i_compute, op[1]))
-            replaced_op = (op[0], sub_ops)
+            replaced_op = (get_opname(op), sub_ops)
         else:
             replaced_op = sym
         return replaced_op
 
     def print_full_op(self, full_op, depth=0):
         spaces = '  ' * depth
-        print spaces + full_op[0], '('
+        print spaces + get_opname(full_op), '('
         for thing in full_op[1]:
             if isinstance(thing, tuple):
                 self.print_full_op(thing, depth=depth + 1)
@@ -908,8 +899,8 @@ class OpGraph(object):
                 print spaces + '  ' + thing
         print spaces + ')'
 
-    def symbol_to_text(self, sym):
-        if sym in self._uniques:
+    def symbol_to_text(self, sym, skip_uniques=False):
+        if skip_uniques and sym in self._uniques:
             return "({})".format(self.op_to_text(self._adj[sym]))
 
         sym_type = self._type(sym)
@@ -937,14 +928,20 @@ class OpGraph(object):
 
         return text
 
-    def op_to_text(self, op):
-        op_name = op[0]
+    def op_to_text(self, op, skip_uniques=True):
+        op_name = get_opname(op)
         args = op[1]
         do = {
-            'add': lambda o: "{} + {}".format(self.symbol_to_text(args[0]), self.symbol_to_text(args[1])),
-            'mul': lambda o: "{} * {}".format(self.symbol_to_text(args[0]), self.symbol_to_text(args[1])),
-            'time_antiderivative': lambda o: "\\int({})".format(self.symbol_to_text(args[0])),
-            'inv': lambda o: "{}^-1".format(self.symbol_to_text(args[0])),
+            'add': lambda o: "{} + {}".format(
+                self.symbol_to_text(args[0], skip_uniques),
+                self.symbol_to_text(args[1], skip_uniques)
+            ),
+            'mul': lambda o: "{} * {}".format(
+                self.symbol_to_text(args[0], skip_uniques),
+                self.symbol_to_text(args[1], skip_uniques)
+            ),
+            'time_antiderivative': lambda o: "\\int({})".format(self.symbol_to_text(args[0], skip_uniques)),
+            'inv': lambda o: "{}^-1".format(self.symbol_to_text(args[0], skip_uniques)),
             'null': lambda o: 'null()',
         }
 
@@ -956,7 +953,7 @@ class OpGraph(object):
         text = do.get(op_name, alt)(op)
         return text
 
-    def arrows(self):
+    def arrows(self, skip_uniques=True):
         """TODO: Make a more useful summary.
 
         Ideas:
@@ -975,17 +972,17 @@ class OpGraph(object):
             op = self._adj[sym]
 
             if op is None:
-                total_text += '-> {}\n'.format(self.symbol_to_text(sym))
+                total_text += '-> {}\n'.format(self.symbol_to_text(sym, skip_uniques=skip_uniques))
                 continue
 
             # Generally, ignore uniques
-            if sym in self._uniques:
+            if skip_uniques and (sym in self._uniques):
                 # BUT, always print them if nothing depends on them
                 if len(inv_adj[sym]) != 0:
                     continue
 
-            text = self.op_to_text(op)
-            total_text += "{} <- {}\n".format(self.symbol_to_text(sym), text)
+            text = self.op_to_text(op, skip_uniques=skip_uniques)
+            total_text += "{} <- {}\n".format(self.symbol_to_text(sym, skip_uniques=skip_uniques), text)
         return total_text
 
     def __str__(self):
@@ -1011,7 +1008,14 @@ def difftest():
     # gr.add('c', 'a', 'b')
 
     gr.forward_mode_differentiate('x1')
-    print gr
+    print '--------\n\n'
+    print gr.arrows(skip_uniques=False)
+    gr.simplify()
+    print '\n'
+    print gr.arrows(skip_uniques=False)
+
+    gr.simplify()
+    print gr.arrows(skip_uniques=False)
 
 
 if __name__ == '__main__':
