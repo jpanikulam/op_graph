@@ -81,16 +81,69 @@ def create_ops(gr):
     }
 
 
+class Constant(object):
+    def __init__(self, properties, value):
+        self._properties = properties
+
+        value_remap = {
+            0: 'zero',
+            0.0: 'zero',
+            1: 'I',
+        }
+        new_value = value_remap.get(value, value)
+
+        valid_special_values = {
+            'matrix': ('I', 'zero'),
+            'liegroup': ('I'),
+            'vector': ('zero', 'ones'),
+            'scalar': ('I', 'zero'),
+        }
+
+        required_type = {
+            'matrix': (tuple, list),
+            'vector': (tuple, list),
+            'liegroup': (tuple, list),
+            'scalar': (float, int),
+        }
+
+        value_type = properties['type']
+        if isinstance(new_value, str):
+            assert new_value in valid_special_values[value_type]
+        else:
+            assert isinstance(new_value, required_type[value_type])
+        self._value = new_value
+
+    @property
+    def properties(self):
+        return self._properties
+
+    @property
+    def value(self):
+        return self._value
+
+    def __str__(self):
+        return "Constant[{}]".format(self._value)
+
+    def __repr__(self):
+        return "Constant[{}]".format(self._value)
+
+
+def op(name, *args):
+    return (name, tuple(args))
+
+
 def inv(gr):
     return {
         ('liegroup',): {
             'returns': gr._inherit_last,
             'needs': [],
+            'inverse': 'inv'
         },
         ('scalar',): {
             'returns': gr._inherit_last,
             'needs': [],
-        }
+            'inverse': 'inv'
+        },
     }
 
 
@@ -103,11 +156,23 @@ def add(gr):
         },
         ('vector', 'vector'): {
             'returns': gr._inherit_last,
-            'needs': [gr._needs_same]
+            'needs': [gr._needs_same],
+            'properties': ['commutative', 'associative'],
+            'identity': (
+                lambda a, b: Constant(gr.get_properties(a), 0),
+                lambda a, b: Constant(gr.get_properties(b), 0),
+            ),
+            'inverse': 'sub'
         },
         ('scalar', 'scalar'): {
             'returns': gr._inherit_last,
-            'needs': [gr._needs_same]
+            'needs': [gr._needs_same],
+            'properties': ['commutative', 'associative'],
+            'identity': (
+                lambda a, b: Constant(gr.get_properties(a), 0),
+                lambda a, b: Constant(gr.get_properties(b), 0),
+            ),
+            'inverse': 'sub'
         },
     }
 
@@ -118,12 +183,12 @@ def dadd(gr):
             {'generate': lambda a, b: a / a}  # Must Fail
         ),
         ('vector', 'vector'): (
-            {'generate': lambda a, b: ('mtx_identity', a)},
-            {'generate': lambda a, b: ('mtx_identity', b)},
+            {'generate': lambda a, b: (gr.mtx_identity_for(a))},
+            {'generate': lambda a, b: (gr.mtx_identity_for(b))},
         ),
         ('scalar', 'scalar'): (
-            {'generate': lambda a, b: 1},
-            {'generate': lambda a, b: 1},
+            {'generate': lambda a, b: Constant(create_scalar(), 1)},
+            {'generate': lambda a, b: Constant(create_scalar(), 1)},
         ),
 
     }
@@ -135,19 +200,33 @@ def mul(gr):
     return {
         ('liegroup', 'vector'): {
             'returns': gr._inherit_last,
-            'needs': [gr._needs_same_dim]
+            'needs': [gr._needs_same_dim],
+            'properties': [],
+            'inverse': 'inv',
         },
         ('liegroup', 'liegroup'): {
             'returns': gr._inherit_last,
-            'needs': [gr._needs_same]
+            'needs': [gr._needs_same],
+            'properties': ['associative'],
+            'inverse': 'inv',
+            # How do we define the identity for this thing?
+            # 'identity': Constant(gr, create_liegroup())
         },
         ('scalar', 'vector'): {
             'returns': gr._inherit_last,
-            'needs': []
+            'needs': [],
+            'properties': ['commutative', 'associative'],
+            'inverse': 'inv',
+            'identity': 1,
+            'zero': 0,
         },
         ('scalar', 'scalar'): {
             'returns': gr._inherit_last,
-            'needs': [gr._needs_same]
+            'needs': [gr._needs_same],
+            'properties': ['commutative', 'associative'],
+            'inverse': 'inv',
+            'identity': 1,
+            'zero': 0,
         },
     }
 
@@ -157,7 +236,7 @@ def dmul(gr):
     return {
         ('liegroup', 'vector'): (
             {
-                'generate': lambda a, b: ('negate', ('skew', ('mul', a, b)))
+                'generate': lambda a, b: op('negate', op('skew', op('mul', a, b)))
             },
             {
                 'generate': lambda a, b: b
@@ -168,16 +247,16 @@ def dmul(gr):
                 'generate': lambda a, b: a
             },
             {
-                'generate': lambda a, b: ('Adj', a)
+                'generate': lambda a, b: op('Adj', a)
             }
         ),
         ('scalar', 'vector'): (
             {
                 'generate': lambda a, b: b
             },
-            # {
-            #     'generate': lambda a, b: ('matrix_identity', b)
-            # }
+            {
+                'generate': lambda a, b: op('mul', b, Constant(gr, 'matrix', 'identity'))
+            }
         ),
         ('scalar', 'scalar'): (
             {
