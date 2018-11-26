@@ -13,7 +13,7 @@ import string
 
 def matrix_txt(props):
     if props['dim'][1] == 1:
-        return 'VecNd<{}>'.format(props['dim'])
+        return 'VecNd<{}>'.format(props['dim'][0])
     else:
         return 'MatNd<{}, {}>'.format(*props['dim'])
 

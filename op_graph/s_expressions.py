@@ -30,8 +30,11 @@ def apply_binary_simplification(gr, sym):
 
     types = gr._types(args)
     this_op = gr._op_table[op_type][types]
+    Log.debug("simplifying :", sym)
+    Log.debug(op)
     if 'zero' in this_op.keys():
         identities = this_op['zero']
+        Log.warn(identities, args)
         for n, (ident, arg) in enumerate(zip(identities, args)):
             if ident is None:
                 continue

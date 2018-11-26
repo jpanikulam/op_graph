@@ -20,7 +20,7 @@ def create_constant(value, properties):
 def create_scalar():
     prop = {
         'type': 'scalar',
-        'dim': 1
+        'dim': (1, 1)
     }
     return prop
 
@@ -113,20 +113,25 @@ class Constant(object):
         new_value = value_remap.get(value, value)
 
         valid_special_values = {
-            'matrix': ('I', 'zero'),
+            'matrix': ('I', 'zero', 'zeros', 'ones'),
             'liegroup': ('I'),
-            'vector': ('Zero', 'ones'),
             'scalar': ('I', 'zero'),
         }
 
         required_type = {
             'matrix': (tuple, list),
-            'vector': (tuple, list),
             'liegroup': (tuple, list),
             'scalar': (float, int),
         }
 
         value_type = properties['type']
+        if value_type == 'matrix':
+            dim = properties['dim']
+            if new_value in ['I', 'zero']:
+                assert dim[0] == dim[1]
+            elif new_value in ['zeros', 'ones']:
+                assert dim[1] == 1
+
         if isinstance(new_value, str):
             assert new_value in valid_special_values[value_type]
         else:
@@ -177,6 +182,17 @@ def inv(gr):
     }
 
 
+def da_db(gr, a, b):
+    p_a = gr.get_properties(a)
+    p_b = gr.get_properties(b)
+
+    xdim = gr.cross_dim(b, a)
+    if p_a['dim'] and p_b['dim']:
+        pass
+
+    return
+
+
 def add(gr):
     return {
         ('liegroup', 'matrix'): {
@@ -214,8 +230,8 @@ def dadd(gr):
             {'generate': lambda a, b: a / a}  # Must Fail
         ),
         ('vector', 'vector'): (
-            {'generate': lambda a, b: (gr.identity_like(a))},
-            {'generate': lambda a, b: (gr.identity_like(b))},
+            {'generate': lambda a, b: (gr.identity_for(a))},
+            {'generate': lambda a, b: (gr.identity_for(b))},
         ),
         ('scalar', 'scalar'): (
             {'generate': lambda a, b: Constant(create_scalar(), 1)},
@@ -249,20 +265,39 @@ def mul(gr):
             'properties': ['associative'],
             'inverse': 'inv',
             'identity': (
-                lambda a, b: gr.identity_like(a),
-                lambda a, b: gr.identity_like(b),
+                lambda a, b: gr.identity_for(b),
+                lambda a, b: gr.identity_for(a, right=True),
             )
         },
         ('scalar', 'matrix'): {
-            'returns': gr._inherit_last,
+            'returns': second(gr._inherit),
             'needs': [],
             'properties': [],
             'inverse': 'inv',
             'identity': (
                 lambda a, b: Constant(gr.get_properties(a), 1),
-                None,
+                # lambda a, b: gr.identity_for(b, right=True),
+                None
             ),
-            'zero': 0,
+            'zero': (
+                # lambda a, b: Constant(gr.get_properties(a), 1),
+                None,
+                lambda a, b: gr.zeros_for(b, right=True),
+            )
+        },
+        ('matrix', 'scalar'): {
+            'returns': first(gr._inherit),
+            'needs': [],
+            'properties': [],
+            'inverse': 'inv',
+            'identity': (
+                lambda a, b: gr.identity_for(b),
+                lambda a, b: Constant(gr.get_properties(a), 1),
+            ),
+            'zero': (
+                lambda a, b: Constant(gr.get_properties(a), 1),
+                lambda a, b: gr.zeros_for(b),
+            )
         },
         ('scalar', 'scalar'): {
             'returns': gr._inherit_last,
@@ -277,6 +312,8 @@ def mul(gr):
                 lambda a, b: Constant(gr.get_properties(a), 0),
                 lambda a, b: Constant(gr.get_properties(b), 0),
             ),
+            'identities': (
+            )
         },
     }
 
@@ -304,11 +341,11 @@ def dmul(gr):
         ('matrix', 'matrix'): (
             {
                 # 'generate': lambda a, b: a
-                'generate': first(gr.zeros_like),
+                'generate': first(gr.zeros_for),
                 'needs': [first(gr._needs_constant)],
             },
             {
-                'generate': lambda a, b: op('mul', b, gr.identity_like(b)),
+                'generate': lambda a, b: a,
                 'needs': [second(gr._needs_vector)],
             }
         ),
@@ -317,8 +354,17 @@ def dmul(gr):
                 'generate': lambda a, b: b
             },
             {
-                'generate': lambda a, b: op('mul', b, gr.identity_like(b)),
+                'generate': lambda a, b: op('mul', a, gr.identity_for(b)),
                 'needs': [second(gr._needs_vector)],
+            }
+        ),
+        ('matrix', 'scalar'): (
+            {
+                'generate': lambda a, b: op('mul', b, gr.identity_for(a)),
+                'needs': [second(gr._needs_vector)],
+            },
+            {
+                'generate': lambda a, b: b
             }
         ),
         ('scalar', 'scalar'): (

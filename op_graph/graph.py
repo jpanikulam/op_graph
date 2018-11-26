@@ -406,11 +406,55 @@ class OpGraph(object):
         self._properties[name] = properties
         return name
 
-    def identity_like(self, mimic_sym):
-        return self.constant_like(mimic_sym, 'I')
+    def identity_for(self, mimic_sym, right=False):
+        """Create a constant that when [left, right] multiplied onto mimic_sym, gives mimic_sym.
 
-    def zeros_like(self, mimic_sym):
-        return self.constant_like(mimic_sym, 0)
+        If `right`, it is as though the constant were multiplied on the *right*
+        If `left`, it is as though the constant were multiplied on the *left*
+        """
+        props = self.get_properties(mimic_sym)
+        if props['type'] == 'matrix':
+            dim = props['dim']
+            if right:
+                return op_defs.Constant(op_defs.create_matrix((dim[1], dim[1])), 'I')
+            else:
+                return op_defs.Constant(op_defs.create_matrix((dim[0], dim[0])), 'I')
+        else:
+            return self.constant_like(mimic_sym, 'I')
+
+    def zeros_for(self, mimic_sym, right=False):
+        """Create a constant that when [left, right] multiplied onto mimic_sym, gives zeros.
+
+        If `right`, it is as though the constant were multiplied on the *right*
+        If `left`, it is as though the constant were multiplied on the *left*
+        """
+        props = self.get_properties(mimic_sym)
+        if props['type'] == 'matrix':
+            dim = props['dim']
+            if right:
+                return op_defs.Constant(op_defs.create_matrix((dim[1], dim[1])), 'zero')
+            else:
+                return op_defs.Constant(op_defs.create_matrix((dim[0], dim[0])), 'zero')
+        else:
+            return self.constant_like(mimic_sym, 'zero')
+
+    def cross_dim(self, a, b):
+        """Return the dimsions of a matrix that would take a to b.
+        C*a = b
+        """
+        return (
+            self.get_properties(a)['dim'][1],
+            self.get_properties(b)['dim'][0]
+        )
+
+    def zeros_between(self, from_sym, to_sym):
+        self._needs_vector(from_sym)
+        self._needs_vector(to_sym)
+        return op_defs.Constant(
+            op_defs.create_matrix(
+                self.cross_dim(from_sym, to_sym)
+            )
+        )
 
     def constant_like(self, mimic_sym, value):
         return op_defs.Constant(self.get_properties(mimic_sym), value)
@@ -798,22 +842,20 @@ class OpGraph(object):
         self._needs_input(wrt)
         inv_adj = self._inverse_adjacency()
 
-        to_diff = deque([wrt])
         diffed = {}
         for inp in get_inputs(self):
-            diffed[inp] = self.constant_like(inp, 0)
-        diffed[wrt] = self.constant_like(wrt, 1)
+            diffed[inp] = self.zeros_for(inp, right=False)
+        diffed[wrt] = self.identity_for(wrt, right=False)
 
+        to_diff = deque()
+        to_diff.extend(inv_adj[wrt])
         while(len(to_diff)):
             td = to_diff.popleft()
-            to_diff.extend(inv_adj[td])
-            if td == wrt:
-                diffed[td] = op_defs.Constant(self.get_properties(td), 1)
-                continue
             if td in diffed.keys():
                 continue
 
             op = self._adj[td]
+            Log.success('To diff', td)
             if op is not None:
                 args = get_args(op)
                 arg_types = self._types(args)
@@ -821,12 +863,15 @@ class OpGraph(object):
                 df_dx_summands = []
                 for n, df_darg in enumerate(df):
                     df_du_sexpr = df_darg['generate'](*args)
-                    df_du_sym = self.anon()
-                    s_expressions.apply_s_expression(self, df_du_sexpr, df_du_sym)
+                    df_du_sym = s_expressions.apply_s_expression(self, df_du_sexpr, self.anon())
                     if self.is_constant(args[n]):
                         du_dx = op_defs.Constant(self.get_properties(args[n]), 'zero')
                     else:
+                        Log.warn("d-d", args[n], self.get_properties(args[n]))
                         du_dx = diffed[args[n]]
+
+                    Log.warn(df_du_sym, du_dx)
+                    Log.warn(self.get_properties(df_du_sym), self.get_properties(du_dx))
                     df_dx_summands.append(self._anony_call('mul', df_du_sym, du_dx))
 
                 if td in self._outputs:
@@ -835,6 +880,9 @@ class OpGraph(object):
                     df_dx_sym = self.anon()
 
                 if df_dx_sym not in self._adj:
+                    for sm in df_dx_summands:
+                        Log.warn("  sm:", sm, self.get_properties(sm))
+
                     total = self.reduce_binary_op('add', df_dx_sym, df_dx_summands)
                 else:
                     total = df_dx_sym
@@ -1026,7 +1074,7 @@ class OpGraph(object):
         return "{}({})".format(self._name, ', '.join(things))
 
 
-def difftest():
+def scalar_difftest():
     gr = OpGraph('DifferentationGraph')
     gr.scalar('x1')
     gr.scalar('x2')
@@ -1048,5 +1096,28 @@ def difftest():
     print gr.arrows(skip_uniques=True)
 
 
+def matrix_difftest():
+    gr = OpGraph('DifferentationGraph')
+    gr.scalar('x1')
+    gr.vector('x2', 3)
+
+    # a = gr.mul(gr.anon(), 'x1', op_defs.Constant(op_defs.create_scalar(), 'I'))
+    # a = gr.mul(gr.anon(), 'x1', 'x1')
+    b = gr.mul('b', 'x1', 'x2')
+    gr.add('c', b, b)
+    gr.output(b)
+
+    # gr.forward_mode_differentiate('x2')
+    print '--------\n\n'
+    print gr.arrows(skip_uniques=False)
+
+    # gr.simplify()
+    # print '\n'
+    # print gr.arrows(skip_uniques=True)
+    # gr.simplify()
+    # print gr.arrows(skip_uniques=True)
+
+
 if __name__ == '__main__':
-    difftest()
+    matrix_difftest()
+    # scalar_difftest()
