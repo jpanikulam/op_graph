@@ -1,8 +1,7 @@
-import graph
-import graph_to_cc
-import integration
-
-from code import CodeGraph
+from op_graph import graph
+from op_graph import graph_to_cc
+from op_graph import integration
+from op_graph.code import CodeGraph
 
 # Register a function that someone will implement in C++
 # gr.add_function(
