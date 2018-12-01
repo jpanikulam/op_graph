@@ -1,4 +1,4 @@
-from graph import OpGraph
+from op_graph.graph import OpGraph
 
 
 def grouptest():
