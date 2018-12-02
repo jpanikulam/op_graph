@@ -3,7 +3,6 @@ import create
 from code import CodeGraph
 import graph
 import graph_tools
-import integration
 from log import Log
 
 from functools import partial
@@ -136,6 +135,28 @@ def inv(sym, gr):
         return "(1.0 / {})".format(sym_to_text(args[0], gr))
 
 
+def vector_index(sym, gr):
+    op = gr.adj[sym]
+    args = graph.get_args(op)
+    vec_name = args[0]
+    index = args[1]
+    return "{}[{}]".format(sym_to_text(vec_name, gr), index)
+
+
+def vstack(sym, gr):
+    op = gr.adj[sym]
+    args = graph.get_args(op)
+
+    n_args = gr.get_properties(sym)['dim'][0]
+
+    s2t = partial(sym_to_text, gr=gr)
+    formed_args = ", ".join(map(s2t, args))
+    return "(VecNd<{n}>() << {args}).finished()".format(
+        n=n_args,
+        args=formed_args
+    )
+
+
 def identity(sym, gr):
     args = graph.get_args(gr.adj[sym])
     return sym_to_text(args[0], gr)
@@ -150,6 +171,8 @@ def sym_children_to_cc(sym, gr):
         'groupify': build_struct,
         'extract': extract,
         'inv': inv,
+        'pull': vector_index,
+        'vstack': vstack,
         'I': identity,
     }
 
@@ -254,24 +277,3 @@ def express(cg, gr):
     Log.debug(cg.generate_source())
     Log.debug('Header------------')
     Log.debug(cg.generate_header())
-
-
-def test_graph():
-    import example_graphs
-    # gr = example_graphs.double_integrator()
-    # gr = example_graphs.simple_graph()
-    gr = example_graphs.rotary_double_integrator()
-    # gr = example_graphs.controlled_vectorspring()
-
-    return gr
-
-
-def main():
-    gr = test_graph()
-    rk4_gr = integration.rk4_integrate(gr)
-    cg = CodeGraph(name='integrator', namespaces=['planning', 'jet'])
-    express(cg, rk4_gr)
-
-
-if __name__ == '__main__':
-    main()

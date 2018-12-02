@@ -100,7 +100,7 @@ class OpGraph(object):
             return sym.properties
         return self._properties[sym]
 
-    def _copy_types(self, gr):
+    def copy_types(self, gr):
         # TODO: Make sure this doesn't overwrite anything
         self._group_types.update(gr._group_types)
 
@@ -117,7 +117,7 @@ class OpGraph(object):
             self._uniques.add(sym)
 
         # Don't always copy functions!
-        self._copy_types(gr)
+        self.copy_types(gr)
 
     def subgraph_functions(self):
         for name, funcs in self._subgraph_functions.items():
@@ -398,6 +398,10 @@ class OpGraph(object):
             if self._adj[name][0] == 'I':
                 args = get_args(self._adj[name])
                 return len(args) and not isinstance(args[0], str)
+
+        if str(name)[0].isdigit():
+            return True
+
         return False
 
     def emplace(self, name, properties):
@@ -483,7 +487,7 @@ class OpGraph(object):
             One idea is to make groups *themeselves* symbols in a style like hcat
         """
         self._needs_iter(input_order)
-        self._copy_types(graph)
+        self.copy_types(graph)
 
         returns = graph.get_properties(output_sym)
         graph._needs(output_sym)
@@ -576,6 +580,22 @@ class OpGraph(object):
     #
     # Operations (Actual operations)
     #
+
+    def pull(self, sym, vec_sym, ind):
+        self._needs_not(sym)
+        self._needs_vector(vec_sym)
+        self._adj[sym] = self._op('pull', vec_sym, ind)
+        self._properties[sym] = op_defs.create_scalar()
+        return sym
+
+    def vstack(self, vec_sym, syms=[]):
+        self._needs_not(vec_sym)
+        for sym in syms:
+            self._needs_type(sym, 'scalar')
+
+        self._adj[vec_sym] = self._op('vstack', *syms)
+        self._properties[vec_sym] = op_defs.create_vector(len(syms))
+        return vec_sym
 
     def groupify(self, group_sym, syms=[], names=[], inherent_type=None):
         """Creates a group."""
@@ -982,6 +1002,9 @@ class OpGraph(object):
     def symbol_to_text(self, sym, skip_uniques=False):
         if skip_uniques and sym in self._uniques:
             return "({})".format(self.op_to_text(self._adj[sym], skip_uniques=skip_uniques))
+
+        if self.is_constant(sym):
+            return str(sym)
 
         sym_type = self._type(sym)
         sym_prop = self.get_properties(sym)

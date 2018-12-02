@@ -1,4 +1,64 @@
 import graph
+from log import Log
+
+
+def group_cardinality(group_properties):
+    count = 0
+    for el in group_properties['elements']:
+        count += el['dim'][0]
+    return count
+
+
+def create_vec_to_group_function(gr, group_name):
+    grx = graph.OpGraph('extract_{}'.format(group_name))
+    struct = gr.group_types[group_name]
+
+    # for _type, name in zip(grp_props['elements'], grp_props['names']):
+    # hstack_args = []
+
+    grx.copy_types(gr)
+    # out_grp = gr.emplace(group_name.lower(), struct)
+    # ex = gr.extract(gr.anon(), in_grp, n)
+    # gr.pull(gr.anon(), ex, n)
+
+    input_dim = group_cardinality(struct)
+    input_vec = grx.vector('in_vec', input_dim)
+
+    group_elements = []
+    count = 0
+    for n, name in enumerate(struct['names']):
+
+        full_dim = struct['elements'][n]['dim']
+        assert full_dim[1] == 1
+        dim = full_dim[0]
+
+        element_type = struct['elements'][n]['type']
+        if element_type == 'scalar':
+            pulled = grx.pull(grx.anon(), input_vec, count)
+            group_elements.append(pulled)
+        elif element_type == 'matrix':
+            pulled = []
+            for k in range(count, count + dim):
+                vec_element = grx.pull(grx.anon(), input_vec, k)
+                pulled.append(vec_element)
+            vec = grx.vstack(gr.anon(), pulled)
+            group_elements.append(vec)
+        else:
+            assert False, "Can't extract for a {}".format(element_type)
+
+        count += dim
+
+    out_grp = grx.groupify('out', group_elements, inherent_type=group_name)
+    grx.output(out_grp)
+
+    print grx
+
+    gr.add_graph_as_function(
+        'from_vector',
+        graph=grx,
+        output_sym=out_grp,
+        input_order=[input_vec]
+    )
 
 
 def insert_qdot_function(gr, rk4):
@@ -116,17 +176,6 @@ def rk4_integrate(gr):
         input_order=[Q, U, Z, h]
     )
 
+    create_vec_to_group_function(rk4_meta, 'Controls')
+
     return rk4_meta
-
-
-def test():
-    import example_graphs
-
-    gr = example_graphs.rotary_double_integrator()
-    # gr = example_graphs.controlled_vectorspring()
-    rk4 = rk4_integrate(gr)
-    print rk4
-
-
-if __name__ == '__main__':
-    test()

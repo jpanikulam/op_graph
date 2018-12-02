@@ -38,9 +38,9 @@ def make_simple_jet():
 
     gr.optimize(gr.scalar('throttle_dot'))
 
-    gr.vector('v', 3)
     gr.time_antiderivative('throttle_pct', 'throttle_dot')
     gr.func('force_from_throttle', 'thrust', 'throttle_pct')
+    # gr.identity('thrust', 'throttle_dot')
 
     gr.vector('unit_z', 3)
     gr.mul('force_world', 'R_world_from_body', gr.mul('body_force', 'thrust', 'unit_z'))
@@ -49,6 +49,7 @@ def make_simple_jet():
 
     gr.mul('a', gr.inv('inv_mass', 'mass'), 'net_force_world')
 
+    gr.vector('v', 3)
     gr.time_antiderivative('v', 'a')
     gr.time_antiderivative('x', 'v')
 
