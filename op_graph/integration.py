@@ -9,6 +9,41 @@ def group_cardinality(group_properties):
     return count
 
 
+def create_group_to_vec(gr, group_name):
+    grx = graph.OpGraph('extract_{}'.format(group_name))
+    struct = gr.group_types[group_name]
+
+    input_group = grx.emplace('in_grp', struct)
+
+    to_stack = []
+    for n, name in enumerate(struct['names']):
+        full_dim = struct['elements'][n]['dim']
+        assert full_dim[1] == 1
+        dim = full_dim[0]
+        element_type = struct['elements'][n]['type']
+
+        if element_type == 'scalar':
+            pulled = grx.extract(grx.anon(), input_group, n)
+            to_stack.append(pulled)
+        elif element_type == 'matrix':
+            pulled = []
+            grp_element = grx.extract(grx.anon(), input_group, n)
+            for k in range(dim):
+                vec_element = grx.pull(grx.anon(), grp_element, k)
+                pulled.append(vec_element)
+            # vec = grx.vstack(gr.anon(), pulled)
+            to_stack.extend(pulled)
+
+    out_vec = grx.vstack('out', to_stack)
+
+    gr.add_graph_as_function(
+        'to_vector',
+        graph=grx,
+        output_sym=out_vec,
+        input_order=[input_group]
+    )
+
+
 def create_vec_to_group_function(gr, group_name):
     grx = graph.OpGraph('extract_{}'.format(group_name))
     struct = gr.group_types[group_name]
@@ -177,5 +212,6 @@ def rk4_integrate(gr):
     )
 
     create_vec_to_group_function(rk4_meta, 'Controls')
+    create_group_to_vec(rk4_meta, 'Controls')
 
     return rk4_meta
