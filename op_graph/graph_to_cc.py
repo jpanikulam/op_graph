@@ -128,7 +128,8 @@ def build_struct(sym, gr):
 def inv(sym, gr):
     op = gr.adj[sym]
     args = graph.get_args(op)
-    arg_type = gr.get_properties(args[0])
+    arg_type = gr.get_properties(args[0])['type']
+
     if arg_type == 'liegroup':
         return "{}.inverse()".format(sym_to_text(args[0], gr))
     else:
@@ -165,7 +166,9 @@ def identity(sym, gr):
 def sym_children_to_cc(sym, gr):
     dispatch = {
         'add': partial(binary, operator='+'),
+        'sub': partial(binary, operator='-'),
         'mul': partial(binary, operator='*'),
+        'div': partial(binary, operator='/'),
         'exp': exp,
         'log': func,
         'groupify': build_struct,
@@ -246,6 +249,7 @@ def to_cc_function(func_name, graph_func, code_graph):
         'mul': "operator*",
         'add': "operator+",
         'sub': "operator-",
+        'div': "operator/",
     }
 
     adapted_func_name = fname_map.get(func_name, func_name)
