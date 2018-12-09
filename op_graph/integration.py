@@ -118,7 +118,7 @@ def rk4_integrate(gr):
         input_order=[Q, U, Z, h]
     )
 
-    groups.create_vec_to_group_function(rk4_meta, 'Controls')
+    groups.create_vec_to_group(rk4_meta, 'Controls')
     groups.create_group_to_vec(rk4_meta, 'Controls')
     groups.create_group_diff(rk4_meta, 'State')
 
