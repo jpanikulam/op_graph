@@ -97,6 +97,12 @@ def func(sym, gr):
     return "{}({})".format(op[0], ', '.join(map(partial(sym_to_text, gr=gr), args)))
 
 
+def log(sym, gr):
+    args = graph.get_args(gr.adj[sym])
+    input_type = gr.get_properties(args[0])['subtype']
+    return "{}::log({})".format(input_type, sym_to_text(args[0], gr=gr))
+
+
 def exp(sym, gr):
     args = graph.get_args(gr.adj[sym])
     result_type = gr.get_properties(sym)['subtype']
@@ -170,7 +176,7 @@ def sym_children_to_cc(sym, gr):
         'mul': partial(binary, operator='*'),
         'div': partial(binary, operator='/'),
         'exp': exp,
-        'log': func,
+        'log': log,
         'groupify': build_struct,
         'extract': extract,
         'inv': inv,
