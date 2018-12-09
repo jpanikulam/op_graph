@@ -805,6 +805,7 @@ class OpGraph(object):
         return new
 
     def _call(self, op_name, new, *args):
+        assert len(args), "Args cannot be empty"
         for arg in args:
             self._needs(arg)
 
@@ -913,14 +914,6 @@ class OpGraph(object):
         for arg in args[1:-1]:
             prev = self._call(op, self.anon(), prev, arg)
         return self._call(op, name, prev, args[-1])
-
-    def log(self, sym_new, a, kind=None):
-        self._needs(a)
-        self._needs_valid_liegroup(a)
-        self._adj[sym_new] = self._op('log', a)
-        a_prop = self.get_properties(a)
-        self._properties[sym_new] = op_defs.create_vector(a_prop['algebra_dim'])
-        return sym_new
 
     def time_antiderivative(self, sym, dsym):
         """These are actually a special class of operations.

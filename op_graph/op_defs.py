@@ -90,7 +90,9 @@ def op_table(gr):
         'inv': inv(gr),
         'mul': mul(gr),
         'add': add(gr),
+        'sub': sub(gr),
         'exp': exp(gr),
+        'log': log(gr),
     }
 
 
@@ -199,7 +201,7 @@ def add(gr):
             'returns': gr._inherit_first,
             'needs': [gr._needs_valid_derivative_type],
             'generate': lambda n, a, b: gr._call('mul', n, gr._anony_call('exp', b), a),
-            'properties': ['commutative', 'associative'],
+            'properties': [],
         },
         ('matrix', 'matrix'): {
             'returns': gr._inherit_last,
@@ -238,6 +240,37 @@ def dadd(gr):
             {'generate': lambda a, b: Constant(create_scalar(), 1)},
         ),
 
+    }
+
+
+def sub(gr):
+    return {
+        ('liegroup', 'liegroup'): {
+            'returns': gr._inherit_first,
+            'needs': [gr._needs_same],
+            'generate': lambda n, a, b: gr._call('mul', n, a, gr._anony_call('inv', b)),
+            'properties': [],
+        },
+        ('matrix', 'matrix'): {
+            'returns': gr._inherit_last,
+            'needs': [gr._needs_same],
+            'properties': ['commutative', 'associative'],
+            'identity': (
+                lambda a, b: Constant(gr.get_properties(a), 0),
+                lambda a, b: Constant(gr.get_properties(b), 0),
+            ),
+            'inverse': 'sub'
+        },
+        ('scalar', 'scalar'): {
+            'returns': gr._inherit_last,
+            'needs': [gr._needs_same],
+            'properties': ['commutative', 'associative'],
+            'identity': (
+                lambda a, b: Constant(gr.get_properties(a), 0),
+                lambda a, b: Constant(gr.get_properties(b), 0),
+            ),
+            'inverse': 'sub'
+        },
     }
 
 
@@ -385,10 +418,19 @@ def exp(gr):
             'returns': gr.exp_type,
             'needs': []
         },
-        ('scalar',): {
-            'returns': lambda a: create_scalar(),
+        # ('scalar',): {
+            # 'returns': lambda a: create_scalar(),
+            # 'needs': []
+        # }
+    }
+
+
+def log(gr):
+    return {
+        ('liegroup',): {
+            'returns': gr.derivative_type,
             'needs': []
-        }
+        },
     }
 
 
