@@ -33,7 +33,7 @@ def create_group_to_vec(gr, group_name):
 
     out_vec = grx.vstack('out', to_stack)
 
-    gr.add_graph_as_function(
+    return gr.add_graph_as_function(
         'to_vector',
         graph=grx,
         output_sym=out_vec,
@@ -41,7 +41,7 @@ def create_group_to_vec(gr, group_name):
     )
 
 
-def create_vec_to_group_function(gr, group_name):
+def create_vec_to_group(gr, group_name):
     grx = graph.OpGraph('extract_{}'.format(group_name))
     struct = gr.group_types[group_name]
     grx.copy_types(gr)
@@ -74,7 +74,7 @@ def create_vec_to_group_function(gr, group_name):
     out_grp = grx.groupify('out', group_elements, inherent_type=group_name)
     grx.output(out_grp)
 
-    gr.add_graph_as_function(
+    return gr.add_graph_as_function(
         'from_vector',
         graph=grx,
         output_sym=out_grp,
@@ -90,7 +90,11 @@ def create_group_diff(gr, group_name):
     grp_a = grx.emplace('a', struct)
     grp_b = grx.emplace('b', struct)
 
-    subtraction = grx.sub(grx.anon(), grp_a, grp_b)
+    # TODO(jake): There is a bug that arises when 'difference' is anonymous
+    # Which causes no code to be generated for it.
+    # It appears to be caused by the way uniques are generated.
+    # TODO TODO TODO
+    subtraction = grx.sub('difference', grp_a, grp_b)
 
     new_elements = []
     for n, name in enumerate(struct['names']):
@@ -98,9 +102,13 @@ def create_group_diff(gr, group_name):
         assert full_dim[1] == 1
 
         element_type = struct['elements'][n]['type']
-        extracted = grx.extract(grx.anon(), subtraction, n)
+
+        error_name = "{}_error".format(name)
+        assert error_name not in struct['names']
+
+        extracted = grx.extract(error_name, subtraction, n)
         if element_type == 'liegroup':
-            log_group = grx.log(grx.anon(), extracted)
+            log_group = grx.log(error_name + "_log", extracted)
             new_elements.append(log_group)
         else:
             new_elements.append(extracted)
@@ -108,9 +116,12 @@ def create_group_diff(gr, group_name):
     grx.register_group_type('StateDelta', new_elements)
     delta = grx.groupify('delta', new_elements, inherent_type='StateDelta')
 
+    to_vec_func = create_group_to_vec(grx, 'StateDelta')
+    delta_vec = grx.func(to_vec_func, 'out_vec', delta)
+
     gr.add_graph_as_function(
-        'delta',
+        'delta_vec',
         graph=grx,
-        output_sym=delta,
+        output_sym=delta_vec,
         input_order=[grp_a, grp_b]
     )
