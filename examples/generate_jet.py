@@ -49,6 +49,7 @@ def make_simple_jet():
 
     gr.vector('unit_z', 3)
     gr.mul('force_world', 'R_world_from_body', gr.mul('body_force', 'thrust', 'unit_z'))
+    # gr.identity('force_world', 'unit_z')
 
     gr.add('net_force_world', 'force_world', 'external_force')
 
