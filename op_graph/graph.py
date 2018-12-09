@@ -520,7 +520,7 @@ class OpGraph(object):
             'output_name': output_sym
         })
         self.add_function(name, returns, args)
-        return input_map
+        return name
 
     def add_function(self, f_name, returns, arguments):
         self._needs_iter(arguments)
