@@ -116,5 +116,14 @@ def needed_header(type_name):
     return depends
 
 
+def needed_header_fnc(fnc_name):
+    mapping = {
+        'dynamic_numerical_gradient': header_dep('numerics/numdiff.hh'),
+        'numerical_hessian': header_dep('numerics/num_hessian.hh'),
+    }
+    depends = mapping.get(fnc_name, [])
+    return depends
+
+
 def type_dep(type_name):
     return type_name
