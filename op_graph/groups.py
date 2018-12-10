@@ -106,18 +106,56 @@ def create_group_diff(gr, group_name):
         error_name = "{}_error".format(name)
         assert error_name not in struct['names']
 
-        extracted = grx.extract(error_name, subtraction, n)
         if element_type == 'liegroup':
+            extracted = grx.extract(error_name, subtraction, n)
             log_group = grx.log(error_name + "_log", extracted)
             new_elements.append(log_group)
         else:
+            extracted = grx.extract(grx.anon(), subtraction, n)
             new_elements.append(extracted)
 
-    grx.register_group_type('StateDelta', new_elements)
-    delta = grx.groupify('delta', new_elements, inherent_type='StateDelta')
+    new_group_name = '{}Delta'.format(group_name)
+    grx.register_group_type(new_group_name, new_elements)
+    delta = grx.groupify('delta', new_elements, inherent_type=new_group_name)
 
-    to_vec_func = create_group_to_vec(grx, 'StateDelta')
+    to_vec_func = create_group_to_vec(grx, new_group_name)
     delta_vec = grx.func(to_vec_func, 'out_vec', delta)
+
+    gr.add_graph_as_function(
+        'delta_vec',
+        graph=grx,
+        output_sym=delta_vec,
+        input_order=[grp_a, grp_b]
+    )
+
+    create_apply_delta(gr, group_name, new_group_name, grx.get_properties(delta_vec))
+
+
+def create_apply_delta(gr, group_name, delta_group, delta_props):
+    grx = graph.OpGraph('apply_delta')
+    struct = gr.group_types[group_name]
+    grx.copy_types(gr)
+
+    from_vec_func = create_vec_to_group(grx, delta_group)
+
+    grp_a = grx.emplace('a', struct)
+    delta = grx.emplace('delta', delta_props)
+    delta_group = grx.func(from_vec_func, 'grp_b', delta)
+
+    out = grx.add('out', grp_a, delta_group)
+
+    gr.add_graph_as_function(
+        'apply_delta',
+        graph=grx,
+        output_sym=out,
+        input_order=[grp_a, delta]
+    )
+
+
+def create_function_jacobian(gr, func):
+    # func =
+    """
+    """
 
     gr.add_graph_as_function(
         'delta_vec',
