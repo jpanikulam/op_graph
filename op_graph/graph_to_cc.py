@@ -235,9 +235,10 @@ def graph_to_impl(gr, output):
 
 def to_cc_function(func_name, graph_func, code_graph):
     gr = graph_func['graph']
-    for name, subgraph in gr.subgraph_functions():
-        sub_function = to_cc_function(name, subgraph, code_graph)
-        code_graph.add_function(sub_function, expose=False)
+    for name, subgraphs in gr.subgraph_functions.items():
+        for subgraph in subgraphs:
+            sub_function = to_cc_function(name, subgraph, code_graph)
+            code_graph.add_function(sub_function, expose=False)
         # print generate.generate(sub_function)
 
     impl = graph_to_impl(graph_func['graph'], graph_func['output_name'])
@@ -279,9 +280,10 @@ def express(cg, gr):
         nstruct = group_to_struct(struct)
         cg.add_struct(nstruct)
 
-    for name, subgraph in gr.subgraph_functions():
-        cc_func = to_cc_function(name, subgraph, cg)
-        cg.add_function(cc_func)
+    for name, subgraphs in gr.subgraph_functions.items():
+        for subgraph in subgraphs:
+            cc_func = to_cc_function(name, subgraph, cg)
+            cg.add_function(cc_func)
 
     Log.debug('Source------------')
     Log.debug(cg.generate_source())

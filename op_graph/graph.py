@@ -119,10 +119,13 @@ class OpGraph(object):
         # Don't always copy functions!
         self.copy_types(gr)
 
+    @property
     def subgraph_functions(self):
-        for name, funcs in self._subgraph_functions.items():
-            for func in funcs:
-                yield (name, func)
+        return self._subgraph_functions
+
+    @property
+    def functions(self):
+        return self._functions
 
     def groups(self):
         groups = []
