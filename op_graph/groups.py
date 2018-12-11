@@ -106,12 +106,11 @@ def create_group_diff(gr, group_name):
         error_name = "{}_error".format(name)
         assert error_name not in struct['names']
 
+        extracted = grx.extract(error_name, subtraction, n)
         if element_type == 'liegroup':
-            extracted = grx.extract(error_name, subtraction, n)
             log_group = grx.log(error_name + "_log", extracted)
             new_elements.append(log_group)
         else:
-            extracted = grx.extract(grx.anon(), subtraction, n)
             new_elements.append(extracted)
 
     new_group_name = '{}Delta'.format(group_name)

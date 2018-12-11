@@ -29,8 +29,8 @@ def make_simple_jet():
     gr.vector('external_force', 3)
 
     gr.so3('R_world_from_body')
-    gr.optimize(gr.vector('q', 3))
 
+    gr.optimize(gr.vector('q', 3))
     gr.time_antiderivative('w', 'q')
 
     # TODO: Add subtraction so we can do damping
