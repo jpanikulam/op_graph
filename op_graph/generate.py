@@ -68,7 +68,10 @@ def generate_struct(struct):
                 cc_types.type_to_str(member['type']),
                 member['name']
             )
-            rhs = cc_types.zero(member['type'])
+
+            zero = cc_types.zero(member['type'])
+            rhs = struct['default_values'].get(member['name'], zero)
+
             if rhs:
                 code.set(lhs, rhs)
             else:

@@ -3,6 +3,7 @@ import create
 from code import CodeGraph
 import graph
 import graph_tools
+from groups import group_cardinality
 from log import Log
 
 from functools import partial
@@ -199,9 +200,22 @@ def group_to_struct(grp_props):
         cc_type = to_cpp_type(_type)
         lvalues.append(create.create_lvalue(cc_type, name))
 
+    #
+    # Cardinality
+    #
+    cardinality = group_cardinality(grp_props)
+    cardinality_type = "static constexpr int"
+    cardinality_name = "DIM".format(inherent_type)
+    lvalues.append(create.create_lvalue(cardinality_type, cardinality_name))
+    default_values = {cardinality_name: cardinality}
+
+    #
+    # Build the struct
+    #
     mystruct = create.create_struct(
         inherent_type,
-        lvalues
+        lvalues,
+        default_values
     )
     return mystruct
 

@@ -2,8 +2,9 @@ import parse
 from copy import deepcopy
 
 language_qualifiers = [
-    'const',
+    'static',
     'constexpr',
+    'const',
     'volatile',
 ]
 

@@ -14,7 +14,7 @@ def create_lvalue(cpp_type, name):
     }
 
 
-def create_struct(name, members):
+def create_struct(name, members, default_values={}):
     dependencies = []
     for mem in members:
         dependencies.append(mem['type'])
@@ -23,6 +23,7 @@ def create_struct(name, members):
         'kind': 'struct',
         'name': name,
         'members': members,
+        'default_values': default_values,
         'deps': dependencies
     }
 
