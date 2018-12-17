@@ -22,7 +22,7 @@ def make_force_fcn():
     return gr
 
 
-def make_simple_jet():
+def make_jet():
     gr = graph.OpGraph()
 
     gr.scalar('mass')
@@ -64,7 +64,7 @@ def make_simple_jet():
 
 
 def main():
-    jet_graph = make_simple_jet()
+    jet_graph = make_jet()
     print jet_graph
     rk4 = integration.rk4_integrate(jet_graph)
 

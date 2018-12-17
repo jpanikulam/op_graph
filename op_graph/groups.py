@@ -118,16 +118,16 @@ def create_group_diff(gr, group_name):
     delta = grx.groupify('delta', new_elements, inherent_type=new_group_name)
 
     to_vec_func = create_group_to_vec(grx, new_group_name)
-    delta_vec = grx.func(to_vec_func, 'out_vec', delta)
+    compute_delta = grx.func(to_vec_func, 'out_vec', delta)
 
     gr.add_graph_as_function(
-        'delta_vec',
+        'compute_delta',
         graph=grx,
-        output_sym=delta_vec,
+        output_sym=compute_delta,
         input_order=[grp_a, grp_b]
     )
 
-    create_apply_delta(gr, group_name, new_group_name, grx.get_properties(delta_vec))
+    create_apply_delta(gr, group_name, new_group_name, grx.get_properties(compute_delta))
 
 
 def create_apply_delta(gr, group_name, delta_group, delta_props):
@@ -157,8 +157,8 @@ def create_function_jacobian(gr, func):
     """
 
     gr.add_graph_as_function(
-        'delta_vec',
+        'compute_delta',
         graph=grx,
-        output_sym=delta_vec,
+        output_sym=compute_delta,
         input_order=[grp_a, grp_b]
     )
