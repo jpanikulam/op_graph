@@ -180,7 +180,7 @@ def rk4_integrate_no_control(gr):
     q1 = q + dq
 
     qdot: states, controls; side_inputs -> dq_dt
-    qdot: x, u; z -> dq_dt
+    qdot: x, z -> dq_dt
 
     """
     # Compute qdot
