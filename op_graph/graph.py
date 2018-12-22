@@ -583,6 +583,54 @@ class OpGraph(object):
     #
     # Operations (Actual operations)
     #
+    def cross_matrix(self, sym, in_sym):
+        self._needs_not(sym)
+        self._needs_vector(in_sym)
+        props = self.get_properties(in_sym)
+        assert props['dim'][0] == 3
+        out_dim = (3, 3)
+
+        self._adj[sym] = self._op('hat', in_sym)
+        self._properties[sym] = op_defs.create_matrix(out_dim)
+        return sym
+
+    def cross_product(self, sym, a, b):
+        self._needs_not(sym)
+        self._needs_vector(a)
+        self._needs_same(a, b)
+
+        props = self.get_properties(a)
+        assert props['dim'][0] == 3
+        out_dim = 3
+
+        self._adj[sym] = self._op('cross', a, b)
+        self._properties[sym] = op_defs.create_vector(out_dim)
+        return sym
+
+    def adjoint(self, sym, in_sym):
+        self._needs_not(sym)
+        self._needs_type(in_sym, 'liegroup')
+        props = self.get_properties(in_sym)
+
+        adj_dim = {
+            'SE3': (6, 6),
+            'SO3': (3, 3),
+        }
+
+        self._adj[sym] = self._op('adjoint', in_sym)
+        self._properties[sym] = op_defs.create_matrix(adj_dim[props['subtype']])
+        return sym
+
+    def block(self, sym, mat_sym, x, y, x_size, y_size):
+        self._needs_not(sym)
+        self._needs_type(mat_sym, 'matrix')
+        props = self.get_properties(mat_sym)
+        assert props['dim'][0] >= x + x_size
+        assert props['dim'][1] >= y + y_size
+
+        self._adj[sym] = self._op('block', mat_sym, x, y, x_size, y_size)
+        self._properties[sym] = op_defs.create_matrix((x_size, y_size))
+        return sym
 
     def pull(self, sym, vec_sym, ind):
         self._needs_not(sym)
