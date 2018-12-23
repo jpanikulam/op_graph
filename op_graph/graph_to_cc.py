@@ -110,6 +110,16 @@ def exp(sym, gr):
     return "{}::exp({})".format(result_type, sym_to_text(args[0], gr=gr))
 
 
+def hat(sym, gr):
+    args = graph.get_args(gr.adj[sym])
+    dim = gr.get_properties(sym)['dim']
+    mappings = {
+        (3, 3): 'SO3',
+        (4, 4): 'SE3',
+    }
+    return "{}::hat({})".format(mappings[dim], sym_to_text(args[0], gr=gr))
+
+
 def extract(sym, gr):
     op = gr.adj[sym]
     args = graph.get_args(op)
@@ -137,10 +147,12 @@ def inv(sym, gr):
     args = graph.get_args(op)
     arg_type = gr.get_properties(args[0])['type']
 
-    if arg_type == 'liegroup':
+    if arg_type in ['liegroup', 'matrix']:
         return "{}.inverse()".format(sym_to_text(args[0], gr))
-    else:
+    elif arg_type == 'scalar':
         return "(1.0 / {})".format(sym_to_text(args[0], gr))
+    else:
+        assert False, "Unupported inverse type"
 
 
 def vector_index(sym, gr):
@@ -165,6 +177,25 @@ def vstack(sym, gr):
     )
 
 
+def member(sym, gr, name=None):
+    assert name is not None
+    args = graph.get_args(gr.adj[sym])
+
+    s2t = partial(sym_to_text, gr=gr)
+    formed_args = ", ".join(map(s2t, args[1:]))
+    return "{}.{}({})".format(sym_to_text(args[0], gr), name, formed_args)
+
+
+def block(sym, gr, name=None):
+    op = gr.adj[sym]
+    args = graph.get_args(op)
+    use_sym = sym_to_text(args[0], gr)
+
+    x, y = args[1], args[2],
+    x_size, y_size = args[3], args[4],
+    return "{}.block<{}, {}>({}, {})".format(use_sym, x_size, y_size, x, y)
+
+
 def identity(sym, gr):
     args = graph.get_args(gr.adj[sym])
     return sym_to_text(args[0], gr)
@@ -178,9 +209,15 @@ def sym_children_to_cc(sym, gr):
         'div': partial(binary, operator='/'),
         'exp': exp,
         'log': log,
+        'hat': hat,
         'groupify': build_struct,
         'extract': extract,
         'inv': inv,
+        'adjoint': partial(member, name='Adj'),
+        'cross': partial(member, name='cross'),
+        'translation': partial(member, name='translation'),
+        'rotation': partial(member, name='so3'),
+        'block': block,
         'pull': vector_index,
         'vstack': vstack,
         'I': identity,
@@ -242,7 +279,7 @@ def graph_to_impl(gr, output):
             )
             cb.set(decl, sym_children_to_cc(sym, gr))
 
-    cb.line('return', output)
+    cb.line('return', sym_to_text(output, gr))
 
     return cb
 

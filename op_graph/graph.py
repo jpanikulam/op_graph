@@ -607,6 +607,24 @@ class OpGraph(object):
         self._properties[sym] = op_defs.create_vector(out_dim)
         return sym
 
+    def translation(self, sym, a):
+        self._needs_not(sym)
+        self._needs_type(a, 'liegroup')
+        props = self.get_properties(a)
+        assert props['subtype'] == 'SE3'
+        self._adj[sym] = self._op('translation', a)
+        self._properties[sym] = op_defs.create_vector(3)
+        return sym
+
+    def rotation(self, sym, a):
+        self._needs_not(sym)
+        self._needs_type(a, 'liegroup')
+        props = self.get_properties(a)
+        assert props['subtype'] == 'SE3'
+        self._adj[sym] = self._op('rotation', a)
+        self._properties[sym] = op_defs.create_liegroup('SO3')
+        return sym
+
     def adjoint(self, sym, in_sym):
         self._needs_not(sym)
         self._needs_type(in_sym, 'liegroup')
