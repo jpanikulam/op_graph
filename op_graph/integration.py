@@ -89,16 +89,16 @@ def rk4_integrate(gr):
     U = rk4.pregroup('U', u, inherent_type='Controls')
     Z = rk4.pregroup('Z', z, inherent_type='Parameters')
 
-    K1 = rk4.func('compute_qdot', 'K1', Q, U, Z)
+    K1 = rk4.mul(rk4.anon(), 'h', rk4.func('compute_qdot', 'K1', Q, U, Z))
 
     Q2 = rk4.add('Q2', Q, rk4.mul(rk4.anon(), half_h, K1))
-    K2 = rk4.func('compute_qdot', 'K2', Q2, U, Z)
+    K2 = rk4.mul(rk4.anon(), 'h', rk4.func('compute_qdot', 'K2', Q2, U, Z))
 
     Q3 = rk4.add('Q3', Q, rk4.mul(rk4.anon(), half_h, K2))
-    K3 = rk4.func('compute_qdot', 'K3', Q3, U, Z)
+    K3 = rk4.mul(rk4.anon(), 'h', rk4.func('compute_qdot', 'K3', Q3, U, Z))
 
     Q4 = rk4.add('Q4', Q, rk4.mul(rk4.anon(), h, K3))
-    K4 = rk4.func('compute_qdot', 'K4', Q4, U, Z)
+    K4 = rk4.mul(rk4.anon(), 'h', rk4.func('compute_qdot', 'K4', Q4, U, Z))
 
     k1_and_k4 = rk4.add(rk4.anon(), K1, K4)
     k2_and_k3 = rk4.mul(rk4.anon(), two, rk4.add(rk4.anon(), K2, K3))
@@ -201,16 +201,16 @@ def rk4_integrate_no_control(gr):
     Q = rk4.pregroup('Q', q, inherent_type='State')
     Z = rk4.pregroup('Z', z, inherent_type='Parameters')
 
-    K1 = rk4.func('compute_qdot', 'K1', Q, Z)
+    K1 = rk4.mul(rk4.anon(), h, rk4.func('compute_qdot', 'K1', Q, Z))
 
     Q2 = rk4.add('Q2', Q, rk4.mul(rk4.anon(), half_h, K1))
-    K2 = rk4.func('compute_qdot', 'K2', Q2, Z)
+    K2 = rk4.mul(rk4.anon(), h, rk4.func('compute_qdot', 'K2', Q2, Z))
 
     Q3 = rk4.add('Q3', Q, rk4.mul(rk4.anon(), half_h, K2))
-    K3 = rk4.func('compute_qdot', 'K3', Q3, Z)
+    K3 = rk4.mul(rk4.anon(), h, rk4.func('compute_qdot', 'K3', Q3, Z))
 
     Q4 = rk4.add('Q4', Q, rk4.mul(rk4.anon(), h, K3))
-    K4 = rk4.func('compute_qdot', 'K4', Q4, Z)
+    K4 = rk4.mul(rk4.anon(), h, rk4.func('compute_qdot', 'K4', Q4, Z))
 
     k1_and_k4 = rk4.add(rk4.anon(), K1, K4)
     k2_and_k3 = rk4.mul(rk4.anon(), two, rk4.add(rk4.anon(), K2, K3))

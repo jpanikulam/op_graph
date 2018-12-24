@@ -51,7 +51,7 @@ def accel_observation_model(grx):
     Rvxw = gr.mul(gr.anon(), Rvx, w)
     vxRw = gr.cross_product(gr.anon(), v, gr.mul(gr.anon(), R_vehicle_from_sensor, w))
 
-    coriolis = gr.add('coriolis', Rvxw, vxRw)
+    coriolis = gr.sub('coriolis', vxRw, Rvxw)
     centrifugal = gr.cross_product('centrifugal', gr.translation(gr.anon(), vehicle_from_sensor), Rvxw)
     inertial_and_euler_all = gr.mul('ad_times_inertial_and_euler', adj, eps_ddot)
     inertial_and_euler = gr.block('inertial_and_euler', inertial_and_euler_all, 0, 0, 3, 1)
