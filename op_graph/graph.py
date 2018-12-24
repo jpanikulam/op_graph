@@ -147,6 +147,8 @@ class OpGraph(object):
             for field_name in field_names:
                 self._needs(field_name)
                 real_field_props.append(self.get_properties(field_name))
+        else:
+            real_field_props = field_properties
         self._group_types[name] = op_defs.create_group(real_field_props, field_names, inherent_type=name)
 
     def anon(self):

@@ -4,7 +4,7 @@ import graph
 def group_cardinality(group_properties):
     count = 0
     for el in group_properties['elements']:
-        count += el['dim'][0]
+        count += el.get('algebra_dim', el['dim'])[0]
     return count
 
 
