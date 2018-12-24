@@ -28,12 +28,13 @@ def gyro_observation_model(grx):
 
 def accel_observation_model(grx):
     gr = graph.OpGraph()
-    world_from_sensor = gr.se3('T_world_from_sensor')
+    world_from_vehicle = gr.se3('T_world_from_vehicle')
+    vehicle_from_sensor = gr.se3('T_vehicle_from_sensor')
 
     eps_dot = gr.vector('eps_dot', 6)
     eps_ddot = gr.vector('eps_ddot', 6)
 
-    g = gr.vector('gravity_mpss', 3)
+    g_world = gr.vector('gravity_mpss', 3)
 
     v = gr.block('v', eps_dot, 0, 0, 3, 1)
     w = gr.block('w', eps_dot, 3, 0, 3, 1)
@@ -41,22 +42,21 @@ def accel_observation_model(grx):
     # a = gr.block('a', eps_ddot, 0, 0, 3, 1)
     # q = gr.block('q', eps_ddot, 3, 0, 3, 1)
 
-    adj = gr.adjoint('adj', world_from_sensor)
+    adj = gr.adjoint('adj', vehicle_from_sensor)
 
-    R_world_from_sensor = gr.rotation('R_world_from_sensor', world_from_sensor)
+    R_vehicle_from_sensor = gr.rotation('R_vehicle_from_sensor', vehicle_from_sensor)
+    R_world_from_sensor = gr.rotation('R_world_from_sensor', gr.mul(gr.anon(), world_from_vehicle, vehicle_from_sensor))
 
-    # R_world_from_sensor = gr.block('R_world_from_sensor', adj, 0, 0, 3, 3)
-
-    Rvx = gr.cross_matrix('Rvx', gr.mul(gr.anon(), R_world_from_sensor, v))
+    Rvx = gr.cross_matrix('Rvx', gr.mul(gr.anon(), R_vehicle_from_sensor, v))
     Rvxw = gr.mul(gr.anon(), Rvx, w)
-    vxRw = gr.cross_product(gr.anon(), v, gr.mul(gr.anon(), R_world_from_sensor, w))
+    vxRw = gr.cross_product(gr.anon(), v, gr.mul(gr.anon(), R_vehicle_from_sensor, w))
 
     coriolis = gr.add('coriolis', Rvxw, vxRw)
-    centrifugal = gr.cross_product('centrifugal', gr.translation(gr.anon(), world_from_sensor), Rvxw)
+    centrifugal = gr.cross_product('centrifugal', gr.translation(gr.anon(), vehicle_from_sensor), Rvxw)
     inertial_and_euler_all = gr.mul('ad_times_inertial_and_euler', adj, eps_ddot)
     inertial_and_euler = gr.block('inertial_and_euler', inertial_and_euler_all, 0, 0, 3, 1)
 
-    g_imu = gr.mul('g_imu_mpss', gr.inv(gr.anon(), R_world_from_sensor), g)
+    g_imu = gr.mul('g_imu_mpss', gr.inv(gr.anon(), R_world_from_sensor), g_world)
 
     observed_acceleration = gr.reduce_binary_op(
         'add',
@@ -74,7 +74,7 @@ def accel_observation_model(grx):
         'observe_accel',
         graph=gr,
         output_sym=observed_acceleration,
-        input_order=[world_from_sensor, eps_dot, eps_ddot, g]
+        input_order=[world_from_vehicle, eps_dot, eps_ddot, vehicle_from_sensor, g_world]
     )
     groups.create_group_diff(grx, 'AccelMeasurement')
 
