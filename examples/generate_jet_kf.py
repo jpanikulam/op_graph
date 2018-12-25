@@ -28,53 +28,59 @@ def gyro_observation_model(grx):
 
 def accel_observation_model(grx):
     gr = graph.OpGraph()
-    world_from_vehicle = gr.se3('T_world_from_vehicle')
-    vehicle_from_sensor = gr.se3('T_vehicle_from_sensor')
+    gr.copy_types(grx)
 
-    eps_dot = gr.vector('eps_dot', 6)
-    eps_ddot = gr.vector('eps_ddot', 6)
+    state = gr.emplace('state', gr.group_types['State'])
+    parameters = gr.emplace('parameters', gr.group_types['Parameters'])
 
-    g_world = gr.vector('gravity_mpss', 3)
+    # sensor_from_vehicle = gr.se3('T_sensor_from_body')
+    # g_world = gr.vector('gravity_mpss', 3)
 
-    v = gr.block('v', eps_dot, 0, 0, 3, 1)
-    w = gr.block('w', eps_dot, 3, 0, 3, 1)
+    # vehicle_from_world = gr.se3('T_vehicle_from_world')
+    # eps_dot = gr.vector('eps_dot', 6)
+    # eps_ddot = gr.vector('eps_ddot', 6)
+    # accel_bias = gr.vector('accel_bias', 3)
 
-    # a = gr.block('a', eps_ddot, 0, 0, 3, 1)
-    # q = gr.block('q', eps_ddot, 3, 0, 3, 1)
+    sensor_from_vehicle = groups.extract_by_name(gr, 'sensor_from_vehicle', parameters, 'T_sensor_from_body')
+    g_world = groups.extract_by_name(gr, 'g_world', parameters, 'g_world')
 
-    adj = gr.adjoint('adj', vehicle_from_sensor)
+    vehicle_from_world = groups.extract_by_name(gr, 'vehicle_from_world', state, 'T_body_from_world')
+    eps_dot = groups.extract_by_name(gr, 'eps_dot', state, 'eps_dot')
+    eps_ddot = groups.extract_by_name(gr, 'eps_ddot', state, 'eps_ddot')
+    accel_bias = groups.extract_by_name(gr, 'accel_bias', state, 'accel_bias')
 
-    R_vehicle_from_sensor = gr.rotation('R_vehicle_from_sensor', vehicle_from_sensor)
-    R_world_from_sensor = gr.rotation('R_world_from_sensor', gr.mul(gr.anon(), world_from_vehicle, vehicle_from_sensor))
+    adj = gr.adjoint('adj', sensor_from_vehicle)
 
-    Rvx = gr.cross_matrix('Rvx', gr.mul(gr.anon(), R_vehicle_from_sensor, v))
-    Rvxw = gr.mul(gr.anon(), Rvx, w)
-    vxRw = gr.cross_product(gr.anon(), v, gr.mul(gr.anon(), R_vehicle_from_sensor, w))
+    vw_imu = gr.mul(gr.anon(), adj, eps_dot)
+    aq_imu = gr.mul(gr.anon(), adj, eps_ddot)
 
-    coriolis = gr.sub('coriolis', vxRw, Rvxw)
-    centrifugal = gr.cross_product('centrifugal', gr.translation(gr.anon(), vehicle_from_sensor), Rvxw)
-    inertial_and_euler_all = gr.mul('ad_times_inertial_and_euler', adj, eps_ddot)
-    inertial_and_euler = gr.block('inertial_and_euler', inertial_and_euler_all, 0, 0, 3, 1)
+    v_imu = gr.block('v', vw_imu, 0, 0, 3, 1)
+    w_imu = gr.block('w', vw_imu, 3, 0, 3, 1)
+    a_imu = gr.block('a', aq_imu, 0, 0, 3, 1)
 
-    g_imu = gr.mul('g_imu_mpss', gr.inv(gr.anon(), R_world_from_sensor), g_world)
+    clean = gr.sub('clean', gr.cross_product(gr.anon(), w_imu, v_imu), a_imu)
+
+    T_sensor_from_world = gr.mul(gr.anon(), sensor_from_vehicle, vehicle_from_world)
+    R_sensor_from_world = gr.rotation('R_sensor_from_world', T_sensor_from_world)
+    g_imu = gr.mul('g_imu', R_sensor_from_world, g_world)
 
     observed_acceleration = gr.reduce_binary_op(
         'add',
         'observed_acceleration',
         [
-            coriolis,
-            centrifugal,
-            inertial_and_euler,
-            g_imu
+            clean,
+            g_imu,
+            accel_bias,
         ]
     )
+
     gr.register_group_type('AccelMeasurement', [observed_acceleration], [gr.get_properties(observed_acceleration)])
 
     grx.add_graph_as_function(
         'observe_accel',
         graph=gr,
         output_sym=observed_acceleration,
-        input_order=[world_from_vehicle, eps_dot, eps_ddot, vehicle_from_sensor, g_world]
+        input_order=[state, parameters]
     )
     groups.create_group_diff(grx, 'AccelMeasurement')
 
@@ -87,13 +93,16 @@ def make_jet():
     gr.vector('daccel_bias', 3)
     gr.vector('dgyro_bias', 3)
 
+    gr.vector('g_world', 3)
+    gr.se3('T_sensor_from_body')
+
     gr.time_antiderivative('accel_bias', 'daccel_bias')
     gr.time_antiderivative('gyro_bias', 'dgyro_bias')
 
-    gr.se3('T_world_from_body')
+    gr.se3('T_body_from_world')
     gr.time_antiderivative('eps_ddot', 'eps_dddot')
     gr.time_antiderivative('eps_dot', 'eps_ddot')
-    gr.time_antiderivative('T_world_from_body', 'eps_dot')
+    gr.time_antiderivative('T_body_from_world', 'eps_dot')
 
     return gr
 
@@ -103,6 +112,7 @@ def main():
     jet_graph = make_jet()
     rk4 = integration.rk4_integrate_no_control(jet_graph)
     accel_observation_model(rk4)
+
     gyro_observation_model(rk4)
 
     cg = CodeGraph(name='integrator', namespaces=['estimation', 'jet_filter'])

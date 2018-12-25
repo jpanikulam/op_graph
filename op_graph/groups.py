@@ -151,6 +151,15 @@ def create_apply_delta(gr, group_name, delta_group, delta_props):
     )
 
 
+def extract_by_name(gr, out_sym, group, field_name):
+    grp_props = gr.get_properties(group)
+    names = grp_props['names']
+    assert field_name in names, "Field name {} not in {}".format(field_name, names)
+    ind = names.index(field_name)
+    assert ind != -1
+    return gr.extract(out_sym, group, ind)
+
+
 def create_function_jacobian(gr, func):
     # func =
     """
