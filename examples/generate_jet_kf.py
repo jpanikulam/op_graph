@@ -33,14 +33,6 @@ def accel_observation_model(grx):
     state = gr.emplace('state', gr.group_types['State'])
     parameters = gr.emplace('parameters', gr.group_types['Parameters'])
 
-    # sensor_from_vehicle = gr.se3('T_sensor_from_body')
-    # g_world = gr.vector('gravity_mpss', 3)
-
-    # vehicle_from_world = gr.se3('T_vehicle_from_world')
-    # eps_dot = gr.vector('eps_dot', 6)
-    # eps_ddot = gr.vector('eps_ddot', 6)
-    # accel_bias = gr.vector('accel_bias', 3)
-
     sensor_from_vehicle = groups.extract_by_name(gr, 'sensor_from_vehicle', parameters, 'T_sensor_from_body')
     g_world = groups.extract_by_name(gr, 'g_world', parameters, 'g_world')
 
@@ -92,16 +84,21 @@ def make_jet():
     gr.vector('eps_dddot', 6)
     gr.vector('daccel_bias', 3)
     gr.vector('dgyro_bias', 3)
+    gr.time_antiderivative('accel_bias', 'daccel_bias')
+    gr.time_antiderivative('gyro_bias', 'dgyro_bias')
+    gr.time_antiderivative('eps_ddot', 'eps_dddot')
 
     gr.vector('g_world', 3)
     gr.se3('T_sensor_from_body')
 
-    gr.time_antiderivative('accel_bias', 'daccel_bias')
-    gr.time_antiderivative('gyro_bias', 'dgyro_bias')
+    gr.se3('T_camera_from_body')
 
-    gr.se3('T_body_from_world')
-    gr.time_antiderivative('eps_ddot', 'eps_dddot')
+    # gr.state(gr.vector('accel_bias', 3))
+    # gr.state(gr.vector('gyro_bias', 3))
+    # gr.state(gr.vector('eps_ddot', 6))
+
     gr.time_antiderivative('eps_dot', 'eps_ddot')
+    gr.se3('T_body_from_world')
     gr.time_antiderivative('T_body_from_world', 'eps_dot')
 
     return gr
@@ -111,8 +108,9 @@ def main():
 
     jet_graph = make_jet()
     rk4 = integration.rk4_integrate_no_control(jet_graph)
-    accel_observation_model(rk4)
+    groups.create_group_diff(rk4, 'Parameters')
 
+    accel_observation_model(rk4)
     gyro_observation_model(rk4)
 
     cg = CodeGraph(name='integrator', namespaces=['estimation', 'jet_filter'])

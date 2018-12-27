@@ -28,6 +28,9 @@ def get_args(op):
 
 
 def get_states(gr):
+    if len(gr.states):
+        return gr.states
+
     states = []
     for name, definition in gr.adj.items():
         if definition is not None:
@@ -64,6 +67,7 @@ class OpGraph(object):
         # What we're optimizing
         self._to_optimize = set()
         self._outputs = set()
+        self._states = set()
 
         # A convenience for naming
         self._uniques = set()
@@ -90,6 +94,11 @@ class OpGraph(object):
     @property
     def to_optimize(self):
         return self._to_optimize
+
+    @property
+    def states(self):
+        return self._states
+
 
     @property
     def uniques(self):
@@ -1010,6 +1019,10 @@ class OpGraph(object):
         self._properties[new_sym] = self.get_properties(sym)
         self._adj[new_sym] = self._op('I', sym)
         return new_sym
+
+    def state(self, sym):
+        self._needs(sym)
+        self._states.add(sym)
 
     def optimize(self, syms):
         if isinstance(syms, (list, tuple)):
