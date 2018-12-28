@@ -75,10 +75,34 @@ def legalize_it(sym_name):
     return new_name
 
 
+def generate_constant(sym, gr):
+    props = gr.get_properties(sym)
+
+    if props['type'] == 'matrix':
+        member_map = {
+            'zeros': 'Zero',
+            'ones': 'Ones',
+            'identity': 'Identity',
+            'zero': 'Zero',
+        }
+        return "{}::{}()".format(matrix_txt(props), member_map[sym.value])
+    elif props['type'] == 'scalar':
+        value_map = {
+            'identity': "1.0",
+            'zero': "0.0",
+        }
+        return value_map.get(sym.value, sym.value)
+
+    raise NotImplementedError("C++ constants not yet implemented for {}".format(props['type']))
+
+
 def sym_to_text(sym, gr):
     if sym in gr.uniques:
         return '({})'.format(sym_children_to_cc(sym, gr))
-    return str(sym)
+    elif gr.is_constant(sym):
+        return generate_constant(sym, gr)
+    else:
+        return str(sym)
 
 
 def binary(sym, gr, operator=None):

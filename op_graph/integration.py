@@ -135,21 +135,19 @@ def insert_qdot_function_no_control(gr, rk4):
 
     for state in states:
         if gr.adj[state] is None:
-            print "{}: None".format(state)
-            statedot = "{}_dot".format(state)
+            statedot_name = "{}_dot".format(state)
             dstate_type = gr.derivative_type(state)
-            gr.emplace(statedot, dstate_type)
+            zero = gr.constant_vector(statedot_name, dstate_type['dim'][0], 'zeros')
+            statedot = zero
+
         else:
             statedot = graph.get_args(gr.adj[state])[0]
-            print graph.get_args(gr.adj[state])
             dstate_type = gr.get_properties(statedot)
 
         qdot.append(statedot)
         qdot_props.append(dstate_type)
         q.append(state)
 
-    # gr.register_group_type('StateDot', qdot, qdot_props)
-    print qdot
     gr.register_group_type('StateDot', qdot)
     gr.register_group_type('State', q)
     gr.register_group_type('Parameters', z)

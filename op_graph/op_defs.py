@@ -32,7 +32,7 @@ def create_vector(dim):
         assert dim[1] == 1
         return create_matrix(dim)
     else:
-        raise TypeError("Did not")
+        raise TypeError("Invalid vector dimensions: {}".format(dim))
 
 
 def create_matrix(dim):
@@ -130,9 +130,9 @@ class Constant(object):
         if value_type == 'matrix':
             dim = properties['dim']
             if new_value in ['I', 'zero']:
-                assert dim[0] == dim[1]
+                assert dim[0] == dim[1], "Zero and identity must be square (Did you mean 'zeros'?)"
             elif new_value in ['zeros', 'ones']:
-                assert dim[1] == 1
+                assert dim[1] == 1, "Zeros and Ones must be vectors"
 
         if isinstance(new_value, str):
             assert new_value in valid_special_values[value_type]

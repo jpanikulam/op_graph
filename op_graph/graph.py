@@ -99,7 +99,6 @@ class OpGraph(object):
     def states(self):
         return self._states
 
-
     @property
     def uniques(self):
         return self._uniques
@@ -409,10 +408,6 @@ class OpGraph(object):
             if self._adj[name] is None:
                 return False
 
-            if self._adj[name][0] == 'I':
-                args = get_args(self._adj[name])
-                return len(args) and not isinstance(args[0], str)
-
         if str(name)[0].isdigit():
             return True
 
@@ -477,9 +472,18 @@ class OpGraph(object):
     def constant_like(self, mimic_sym, value):
         return op_defs.Constant(self.get_properties(mimic_sym), value)
 
+    def constant_vector(self, name, dim, value):
+        props = op_defs.create_vector(dim)
+        constant = op_defs.Constant(props, value)
+        self._adj[name] = self._op('I', constant)
+        self._properties[name] = props
+        return name
+
     def constant_scalar(self, name, value):
-        self._adj[name] = self._op('I', value)
-        self._properties[name] = op_defs.create_scalar()
+        props = op_defs.create_scalar()
+        constant = op_defs.Constant(props, value)
+        self._adj[name] = self._op('I', constant)
+        self._properties[name] = props
         return name
 
     def scalar(self, name):
