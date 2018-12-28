@@ -81,26 +81,23 @@ def accel_observation_model(grx):
 
 def make_jet():
     gr = graph.OpGraph()
-    gr.vector('eps_dddot', 6)
-    gr.vector('daccel_bias', 3)
-    gr.vector('dgyro_bias', 3)
-    gr.time_antiderivative('accel_bias', 'daccel_bias')
-    gr.time_antiderivative('gyro_bias', 'dgyro_bias')
-    gr.time_antiderivative('eps_ddot', 'eps_dddot')
+    # gr.vector('eps_dddot', 6)
+    # gr.vector('daccel_bias', 3)
+    # gr.vector('dgyro_bias', 3)
+    # gr.time_antiderivative('accel_bias', 'daccel_bias')
+    # gr.time_antiderivative('gyro_bias', 'dgyro_bias')
+    # gr.time_antiderivative('eps_ddot', 'eps_dddot')
 
     gr.vector('g_world', 3)
     gr.se3('T_sensor_from_body')
-
     gr.se3('T_camera_from_body')
 
-    # gr.state(gr.vector('accel_bias', 3))
-    # gr.state(gr.vector('gyro_bias', 3))
-    # gr.state(gr.vector('eps_ddot', 6))
-
-    gr.time_antiderivative('eps_dot', 'eps_ddot')
-    gr.se3('T_body_from_world')
+    gr.state(gr.vector('accel_bias', 3))
+    gr.state(gr.vector('gyro_bias', 3))
+    gr.state(gr.vector('eps_ddot', 6))
+    gr.state(gr.time_antiderivative('eps_dot', 'eps_ddot'))
+    gr.state(gr.se3('T_body_from_world'))
     gr.time_antiderivative('T_body_from_world', 'eps_dot')
-
     return gr
 
 

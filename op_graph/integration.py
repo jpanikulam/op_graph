@@ -130,13 +130,26 @@ def insert_qdot_function_no_control(gr, rk4):
 
     q = []
     qdot = []
+    qdot_props = []
     z = list(graph.get_parameters(gr))
 
     for state in states:
-        statedot = graph.get_args(gr.adj[state])[0]
+        if gr.adj[state] is None:
+            print "{}: None".format(state)
+            statedot = "{}_dot".format(state)
+            dstate_type = gr.derivative_type(state)
+            gr.emplace(statedot, dstate_type)
+        else:
+            statedot = graph.get_args(gr.adj[state])[0]
+            print graph.get_args(gr.adj[state])
+            dstate_type = gr.get_properties(statedot)
+
         qdot.append(statedot)
+        qdot_props.append(dstate_type)
         q.append(state)
 
+    # gr.register_group_type('StateDot', qdot, qdot_props)
+    print qdot
     gr.register_group_type('StateDot', qdot)
     gr.register_group_type('State', q)
     gr.register_group_type('Parameters', z)
@@ -184,7 +197,7 @@ def rk4_integrate_no_control(gr):
 
     """
     # Compute qdot
-    rk4 = graph.OpGraph('qdot')
+    rk4 = graph.OpGraph('Rk4')
     q, z = insert_qdot_function_no_control(gr, rk4)
     for qq in q:
         rk4.emplace(qq, gr.get_properties(qq))
@@ -201,6 +214,7 @@ def rk4_integrate_no_control(gr):
     Q = rk4.pregroup('Q', q, inherent_type='State')
     Z = rk4.pregroup('Z', z, inherent_type='Parameters')
 
+    # rk4.func('compute_qdot', 'K11', Q, Z)
     K1 = rk4.mul(rk4.anon(), h, rk4.func('compute_qdot', 'K1', Q, Z))
 
     Q2 = rk4.add('Q2', Q, rk4.mul(rk4.anon(), half_h, K1))
