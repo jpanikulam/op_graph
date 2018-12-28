@@ -1,10 +1,18 @@
 import graph
 import groups
 from log import Log
+from graph_tools import topological_sort, mimic_order
+
+
+def get_sorted_states(gr):
+    states = graph.get_states(gr)
+    topso = topological_sort(gr.adj)
+    sorted_states = mimic_order(states, topso)
+    return sorted_states
 
 
 def insert_qdot_function(gr, rk4):
-    states = graph.get_states(gr)
+    states = get_sorted_states(gr)
 
     q = []
     qdot = []
@@ -126,8 +134,7 @@ def rk4_integrate(gr):
 
 
 def insert_qdot_function_no_control(gr, rk4):
-    states = graph.get_states(gr)
-
+    states = get_sorted_states(gr)
     q = []
     qdot = []
     qdot_props = []
