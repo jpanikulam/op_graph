@@ -12,17 +12,13 @@ def fiducial_observation_model(grx):
     state = gr.emplace('state', gr.group_types['State'])
     parameters = gr.emplace('parameters', gr.group_types['Parameters'])
 
-    imu_from_vehicle = groups.extract_by_name(gr, 'imu_from_vehicle', parameters, 'T_imu_from_vehicle')
+    # imu_from_vehicle = groups.extract_by_name(gr, 'imu_from_vehicle', parameters, 'T_imu_from_vehicle')
 
-    eps_dot = groups.extract_by_name(gr, 'eps_dot', state, 'eps_dot')
-    gyro_bias = groups.extract_by_name(gr, 'gyro_bias', state, 'gyro_bias')
-    w = gr.block('w', eps_dot, 3, 0, 3, 1)
-    R_sensor_from_vehicle = gr.rotation('R_sensor_from_vehicle', imu_from_vehicle)
-    w_imu = gr.mul(gr.anon(), R_sensor_from_vehicle, w)
+    # world_from_vehicle = camera_from_fiducial
 
-    observed_w = gr.add('observed_w', w_imu, gyro_bias)
+    # camera_from_fiducial =
 
-    gr.register_group_type('GyroMeasurement', [observed_w], [gr.get_properties(observed_w)])
+    gr.register_group_type('FiducialMeasurement', [camera_from_world], [gr.get_properties(camera_from_world)])
 
     grx.add_graph_as_function(
         'observe_gyro',
@@ -30,6 +26,9 @@ def fiducial_observation_model(grx):
         output_sym=observed_w,
         input_order=[state, parameters]
     )
+
+    add_error_model(grx, 'FiducialMeasurement', 'observe_fiducial')
+
     return gr
 
 
@@ -50,15 +49,21 @@ def gyro_observation_model(grx):
 
     observed_w = gr.add('observed_w', w_imu, gyro_bias)
 
-    gr.register_group_type('GyroMeasurement', [observed_w], [gr.get_properties(observed_w)])
+    generated_type = 'GyroMeasurement'
+    generated_func = 'observe_gyro'
+    gr.register_group_type(generated_type, [observed_w], [gr.get_properties(observed_w)])
+
+    gyro_meas = gr.groupify('gyro_meas', [observed_w], inherent_type=generated_type)
 
     grx.add_graph_as_function(
-        'observe_gyro',
+        generated_func,
         graph=gr,
-        output_sym=observed_w,
+        output_sym=gyro_meas,
         input_order=[state, parameters]
     )
-    groups.create_group_diff(grx, 'GyroMeasurement')
+    groups.create_group_diff(grx, generated_type)
+
+    add_error_model(grx, generated_type, generated_func)
     return gr
 
 
@@ -101,34 +106,45 @@ def accel_observation_model(grx):
             accel_bias,
         ]
     )
+    generated_type = 'AccelMeasurement'
+    generated_func = 'observe_accel'
 
     gr.register_group_type(
-        'AccelMeasurement',
+        generated_type,
         [observed_acceleration],
         [gr.get_properties(observed_acceleration)])
 
-    accel_meas = gr.groupify('accel_meas', [observed_acceleration], inherent_type='AccelMeasurement')
-
-    # gr.register_group_type('AccelMeasurement', [observed_acceleration], [gr.get_properties(observed_acceleration)])
+    accel_meas = gr.groupify('accel_meas', [observed_acceleration], inherent_type=generated_type)
 
     grx.add_graph_as_function(
-        'observe_accel',
+        generated_func,
         graph=gr,
         output_sym=accel_meas,
         input_order=[state, parameters]
     )
-    groups.create_group_diff(grx, 'AccelMeasurement')
+    groups.create_group_diff(grx, generated_type)
 
+    add_error_model(grx, generated_type, generated_func)
     return gr
 
 
 def add_error_model(grx, group_type, model_name):
     gr = graph.OpGraph('ErrorModel')
+    gr.copy_types(grx)
+    gr._copy_functions(grx)
+
+    state = gr.emplace('state', gr.group_types['State'])
+    meas = gr.emplace('meas', gr.group_types[group_type])
+    parameters = gr.emplace('parameters', gr.group_types['Parameters'])
+
+    expected = gr.func(model_name, 'expected', state, parameters)
+    error = gr.func('compute_delta', 'error', meas, expected)
+
     grx.add_graph_as_function(
         model_name + "_error_model",
         graph=gr,
-        output_sym=accel_meas,
-        input_order=[state, parameters]
+        output_sym=error,
+        input_order=[state, meas, parameters]
     )
 
 
