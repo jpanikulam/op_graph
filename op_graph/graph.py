@@ -544,8 +544,10 @@ class OpGraph(object):
             'input_names': tuple(input_map),
             'output_name': output_sym,
             'member': should_be_member,
-            'name': name
+            'name': name,
+            'unique_id': self.unique()
         }
+
         self._subgraph_functions[name].append(function)
         self.add_function(name, returns, args)
 
@@ -581,7 +583,19 @@ class OpGraph(object):
     def _op(self, name, *args):
         return (name, args)
 
-    def func(self, func, sym_new, *args):
+    def get_subgraph_overload(self, func, args):
+        self.get_overload(func, args)
+        arg_props = tuple([self.get_properties(arg) for arg in args])
+        for function in self._subgraph_functions[func]:
+            if function['args'] == arg_props:
+                explicit_func = function
+                return explicit_func
+        else:
+            assert False
+
+    def get_overload(self, func, args):
+        overloaded_funcs = self._functions[func]
+        arg_props = tuple([self.get_properties(arg) for arg in args])
         assert func in self._functions.keys(), "{} not known".format(func)
         overloaded_funcs = self._functions[func]
 
@@ -590,7 +604,7 @@ class OpGraph(object):
         for function in overloaded_funcs:
             if function['args'] == arg_props:
                 explicit_func = function
-                break
+                return explicit_func
         else:
             Log.warn("No valid function for: {}()".format(func))
             Log.warn(arg_props)
@@ -598,6 +612,9 @@ class OpGraph(object):
             for function in overloaded_funcs:
                 Log.success(function['args'])
             raise KeyError("No valid function.")
+
+    def func(self, func, sym_new, *args):
+        explicit_func = self.get_overload(func, args)
 
         for supplied_arg, expected_property in zip(args, explicit_func['args']):
             self._needs(supplied_arg)

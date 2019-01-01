@@ -120,12 +120,16 @@ def func(sym, gr):
     op = gr.adj[sym]
     args = graph.get_args(op)
     func_name = op[0]
+    prefix = ""
     if func_name in gr.subgraph_functions:
-        member_of = gr.subgraph_functions[func_name][0]['member_of']
+        overload = gr.get_subgraph_overload(func_name, args)
+        if overload['member'] is not None:
+            prefix = "{}::".format(overload['member'])
 
-        # gr._group_members[]
-
-    return "{}({})".format(op[0], ', '.join(map(partial(sym_to_text, gr=gr), args)))
+    return prefix + "{}({})".format(
+        func_name,
+        ','.join(map(partial(sym_to_text, gr=gr), args))
+    )
 
 
 def log(sym, gr):
@@ -271,7 +275,7 @@ def all_elements_vector(grp_props):
         return True
 
 
-def group_to_struct(gr, grp_props, cg):
+def group_to_struct(gr, grp_props, cg, already_generated):
     inherent_type = grp_props['inherent_type']
     assert inherent_type is not None
 
@@ -280,17 +284,16 @@ def group_to_struct(gr, grp_props, cg):
         cc_type = to_cpp_type(_type)
         lvalues.append(create.create_lvalue(cc_type, name))
 
+    #
     # Add members
     struct_functions = []
     members = gr.group_members[inherent_type]
     for member in members:
         Log.info("Adding: {} to {}".format(member['name'], inherent_type))
-        func = to_cc_function(member['name'], member, cg)
+        func = to_cc_function(member['name'], member, cg, already_generated)
         struct_functions.append(func)
 
-    # if len(gr.group_members[inherent_type]):
-        # Log.warn(gr.group_members[inherent_type])
-
+    #
     # Add ind/dim features
     default_values = dict()
     if all_elements_vector(grp_props):
@@ -309,17 +312,14 @@ def group_to_struct(gr, grp_props, cg):
 
     #
     # Cardinality
-    #
     cardinality = groups.group_cardinality(grp_props)
     cardinality_type = "static constexpr int"
     cardinality_name = "DIM"
     lvalues.append(create.create_lvalue(cardinality_type, cardinality_name))
-    # default_values = {cardinality_name: cardinality}
     default_values[cardinality_name] = cardinality
 
     #
     # Build the struct
-    #
     mystruct = create.create_struct(
         inherent_type,
         lvalues,
@@ -356,24 +356,25 @@ def graph_to_impl(gr, output):
     return cb
 
 
-def to_cc_function(func_name, graph_func, code_graph):
+def to_cc_function(func_name, graph_func, code_graph, generated, to_expose=[]):
     gr = graph_func['graph']
 
-    # if code_graph is not None:
     for name, subgraphs in gr.subgraph_functions.items():
         for subgraph in subgraphs:
+            # Don't `generate` member functions
             if subgraph['member'] is not None:
-                Log.warn("Skipping: ", subgraph['member'])
                 continue
 
-            sub_function = to_cc_function(name, subgraph, code_graph)
-            code_graph.add_function(sub_function, expose=False)
+            if subgraph['unique_id'] in generated:
+                Log.warn("Skipping: {}, already generated".format(name))
+                continue
+            else:
+                Log.warn("Generating: {}".format(name))
+                generated.add(subgraph['unique_id'])
 
-    # elif len(gr.subgraph_functions):
-        # Log.warn("Not recursing over {} subfunctions in: {}".format(
-        #     len(gr.subgraph_functions),
-        #     func_name
-        # ))
+            sub_function = to_cc_function(name, subgraph, code_graph, generated, to_expose)
+            expose = subgraph['unique_id'] in to_expose
+            code_graph.add_function(sub_function, expose=expose)
 
     impl = graph_to_impl(graph_func['graph'], graph_func['output_name'])
     inputs = graph_func['input_names']
@@ -409,21 +410,30 @@ def express(cg, gr):
     assert isinstance(cg, CodeGraph)
     assert isinstance(gr, graph.OpGraph)
 
+    already_generated = set()
+
     structs = gr.group_types
     for struct in structs.values():
-        nstruct = group_to_struct(gr, struct, cg)
+        nstruct = group_to_struct(gr, struct, cg, already_generated)
         cg.add_struct(nstruct)
+
+    # to_expose = map(lambda o: o.get('unique_id'), gr.subgraph_functions.values())
+    to_expose = set()
+    for subfuncs in gr.subgraph_functions.values():
+        for subfunc in subfuncs:
+            to_expose.add(subfunc['unique_id'])
 
     for name, subgraphs in gr.subgraph_functions.items():
         for subgraph in subgraphs:
             if subgraph['member'] is not None:
-                Log.warn("Skipping: ", subgraph['member'])
                 continue
 
-            cc_func = to_cc_function(name, subgraph, cg)
-            cg.add_function(cc_func)
+            if subgraph['unique_id'] in already_generated:
+                Log.warn("Skipping: {}, already generated".format(name))
+                continue
+            else:
+                Log.warn("Generating: {}".format(name))
+                already_generated.add(subgraph['unique_id'])
 
-    # Log.debug('Source------------')
-    # Log.debug(cg.generate_source())
-    # Log.debug('Header------------')
-    # Log.debug(cg.generate_header())
+            cc_func = to_cc_function(name, subgraph, cg, already_generated, to_expose)
+            cg.add_function(cc_func)
