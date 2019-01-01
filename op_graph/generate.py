@@ -2,6 +2,12 @@ from text import clang_fmt
 import cc_types
 
 
+def func_name(func):
+    if func['member_of'] is None:
+        return func['name']
+    return "{}::{}".format(func['member_of'], func['name'])
+
+
 class CodeBlock(object):
     def __init__(self, deps=[]):
         self.code = ""
@@ -61,7 +67,7 @@ class StructScope(Scope):
         self.write('};')
 
 
-def generate_struct(struct):
+def declare_struct(struct):
     with StructScope(struct['name']) as code:
         for member in struct['members']:
             lhs = "{} {}".format(
@@ -72,17 +78,31 @@ def generate_struct(struct):
             zero = cc_types.zero(member['type'])
             rhs = struct['default_values'].get(member['name'], zero)
 
-            if rhs:
+            if rhs is not None:
                 code.set(lhs, rhs)
             else:
                 code.line(lhs)
 
+        for member_function in struct['member_functions']:
+            func_decl = "static " + declare_func(member_function)
+            code.write(func_decl)
+
     return code.code
 
 
-def generate_func(func):
+def generate_struct(struct):
+    code = CodeBlock()
+    for member_function in struct['member_functions']:
+        # func_decl = "static {}::".format(struct['name']) + declare_func(member_function)
+        # func_decl = "static " + declare_func(member_function)
+        # code.write(func_decl)
+        code.write(generate_func(member_function, namespace=struct['name']))
+    return code.code
+
+
+def generate_func(func, namespace=None):
     text = ""
-    text += func_decl(func)
+    text += func_decl(func, namespace)
     with Scope() as code:
         if func['impl'] is not None:
             code.write(func['impl'])
@@ -100,18 +120,19 @@ def generate(thing):
     return clang_fmt(dispatch(thing))
 
 
-def declare_struct(struct):
-    return generate(struct)
-
-
-def func_decl(func):
+def func_decl(func, namespace=None):
     args_list = ['{} {}'.format(cc_types.type_to_str(arg['type']), arg['name']) for arg in func['args']]
     assert func['kind'] == 'function'
 
     args = ",".join(args_list)
+
+    prefix = ""
+    if namespace is not None:
+        prefix = "{}::".format(namespace)
+
     return "{} {}({})".format(
         cc_types.type_to_str(func['returns']),
-        func['name'],
+        prefix + func['name'],
         args
     )
 

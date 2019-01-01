@@ -1,6 +1,10 @@
 import graph
 
 
+def get_dim(props):
+    return props.get('algebra_dim', props['dim'])[0]
+
+
 def group_cardinality(group_properties):
     count = 0
     for el in group_properties['elements']:
@@ -37,7 +41,8 @@ def create_group_to_vec(gr, group_name):
         'to_vector',
         graph=grx,
         output_sym=out_vec,
-        input_order=[input_group]
+        input_order=[input_group],
+        should_be_member=group_name
     )
 
 
@@ -78,7 +83,8 @@ def create_vec_to_group(gr, group_name):
         'from_vector',
         graph=grx,
         output_sym=out_grp,
-        input_order=[input_vec]
+        input_order=[input_vec],
+        should_be_member=group_name
     )
 
 
@@ -124,7 +130,8 @@ def create_group_diff(gr, group_name):
         'compute_delta',
         graph=grx,
         output_sym=compute_delta,
-        input_order=[grp_a, grp_b]
+        input_order=[grp_a, grp_b],
+        should_be_member=group_name
     )
 
     create_apply_delta(gr, group_name, new_group_name, grx.get_properties(compute_delta))
@@ -147,7 +154,8 @@ def create_apply_delta(gr, group_name, delta_group, delta_props):
         'apply_delta',
         graph=grx,
         output_sym=out,
-        input_order=[grp_a, delta]
+        input_order=[grp_a, delta],
+        should_be_member=group_name
     )
 
 

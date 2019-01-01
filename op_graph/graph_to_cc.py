@@ -3,7 +3,7 @@ import create
 from code import CodeGraph
 import graph
 import graph_tools
-from groups import group_cardinality
+import groups
 from log import Log
 
 from functools import partial
@@ -119,6 +119,12 @@ def binary(sym, gr, operator=None):
 def func(sym, gr):
     op = gr.adj[sym]
     args = graph.get_args(op)
+    func_name = op[0]
+    if func_name in gr.subgraph_functions:
+        member_of = gr.subgraph_functions[func_name][0]['member_of']
+
+        # gr._group_members[]
+
     return "{}({})".format(op[0], ', '.join(map(partial(sym_to_text, gr=gr), args)))
 
 
@@ -252,7 +258,20 @@ def sym_children_to_cc(sym, gr):
     return result
 
 
-def group_to_struct(grp_props):
+def create_constexpr_int(name):
+    cxpr_type = 'static constexpr int'
+    return create.create_lvalue(cxpr_type, name)
+
+
+def all_elements_vector(grp_props):
+    for _type, name in zip(grp_props['elements'], grp_props['names']):
+        if _type['type'] != 'matrix' or _type['dim'][1] != 1:
+            return False
+    else:
+        return True
+
+
+def group_to_struct(gr, grp_props, cg):
     inherent_type = grp_props['inherent_type']
     assert inherent_type is not None
 
@@ -261,14 +280,42 @@ def group_to_struct(grp_props):
         cc_type = to_cpp_type(_type)
         lvalues.append(create.create_lvalue(cc_type, name))
 
+    # Add members
+    struct_functions = []
+    members = gr.group_members[inherent_type]
+    for member in members:
+        Log.info("Adding: {} to {}".format(member['name'], inherent_type))
+        func = to_cc_function(member['name'], member, cg)
+        struct_functions.append(func)
+
+    # if len(gr.group_members[inherent_type]):
+        # Log.warn(gr.group_members[inherent_type])
+
+    # Add ind/dim features
+    default_values = dict()
+    if all_elements_vector(grp_props):
+        index_so_far = 0
+        for _type, name in zip(grp_props['elements'], grp_props['names']):
+            cc_type = to_cpp_type(_type)
+            ind_name = "{}_ind".format(name)
+            dim_name = "{}_dim".format(name)
+            lvalues.append(create_constexpr_int(ind_name))
+            lvalues.append(create_constexpr_int(dim_name))
+
+            dim = groups.get_dim(_type)
+            default_values[ind_name] = index_so_far
+            default_values[dim_name] = dim
+            index_so_far += dim
+
     #
     # Cardinality
     #
-    cardinality = group_cardinality(grp_props)
+    cardinality = groups.group_cardinality(grp_props)
     cardinality_type = "static constexpr int"
-    cardinality_name = "DIM".format(inherent_type)
+    cardinality_name = "DIM"
     lvalues.append(create.create_lvalue(cardinality_type, cardinality_name))
-    default_values = {cardinality_name: cardinality}
+    # default_values = {cardinality_name: cardinality}
+    default_values[cardinality_name] = cardinality
 
     #
     # Build the struct
@@ -276,7 +323,8 @@ def group_to_struct(grp_props):
     mystruct = create.create_struct(
         inherent_type,
         lvalues,
-        default_values
+        default_values,
+        member_functions=struct_functions
     )
     return mystruct
 
@@ -310,15 +358,25 @@ def graph_to_impl(gr, output):
 
 def to_cc_function(func_name, graph_func, code_graph):
     gr = graph_func['graph']
+
+    # if code_graph is not None:
     for name, subgraphs in gr.subgraph_functions.items():
         for subgraph in subgraphs:
+            if subgraph['member'] is not None:
+                Log.warn("Skipping: ", subgraph['member'])
+                continue
+
             sub_function = to_cc_function(name, subgraph, code_graph)
             code_graph.add_function(sub_function, expose=False)
-        # print generate.generate(sub_function)
+
+    # elif len(gr.subgraph_functions):
+        # Log.warn("Not recursing over {} subfunctions in: {}".format(
+        #     len(gr.subgraph_functions),
+        #     func_name
+        # ))
 
     impl = graph_to_impl(graph_func['graph'], graph_func['output_name'])
     inputs = graph_func['input_names']
-
     lvalues = []
     types = map(gr.get_properties, inputs)
 
@@ -340,7 +398,8 @@ def to_cc_function(func_name, graph_func, code_graph):
         adapted_func_name,
         lvalues,
         create.create_type(to_cpp_type(graph_func['returns'])),
-        impl=impl
+        member_of=graph_func['member'],
+        impl=impl,
     )
 
     return myfunc
@@ -352,15 +411,19 @@ def express(cg, gr):
 
     structs = gr.group_types
     for struct in structs.values():
-        nstruct = group_to_struct(struct)
+        nstruct = group_to_struct(gr, struct, cg)
         cg.add_struct(nstruct)
 
     for name, subgraphs in gr.subgraph_functions.items():
         for subgraph in subgraphs:
+            if subgraph['member'] is not None:
+                Log.warn("Skipping: ", subgraph['member'])
+                continue
+
             cc_func = to_cc_function(name, subgraph, cg)
             cg.add_function(cc_func)
 
-    Log.debug('Source------------')
-    Log.debug(cg.generate_source())
-    Log.debug('Header------------')
-    Log.debug(cg.generate_header())
+    # Log.debug('Source------------')
+    # Log.debug(cg.generate_source())
+    # Log.debug('Header------------')
+    # Log.debug(cg.generate_header())

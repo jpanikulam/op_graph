@@ -14,7 +14,7 @@ def create_lvalue(cpp_type, name):
     }
 
 
-def create_struct(name, members, default_values={}):
+def create_struct(name, members, default_values={}, member_functions=[]):
     dependencies = []
     for mem in members:
         dependencies.append(mem['type'])
@@ -23,12 +23,13 @@ def create_struct(name, members, default_values={}):
         'kind': 'struct',
         'name': name,
         'members': members,
+        'member_functions': member_functions,
         'default_values': default_values,
         'deps': dependencies
     }
 
 
-def create_function(name, arguments, returns, impl=None):
+def create_function(name, arguments, returns, member_of=None, impl=None):
     if impl is None:
         impl_deps = []
     else:
@@ -45,5 +46,6 @@ def create_function(name, arguments, returns, impl=None):
         'args': tuple(arguments),
         'returns': returns,
         'impl': str(impl) if impl is not None else None,
-        'deps': deps
+        'deps': deps,
+        'member_of': None,
     }

@@ -97,9 +97,9 @@ class CodeGraph(object):
 
         code_text = ""
         for child in self._children:
-            props = self._get_properties(child)
-            if props['expose'] and props['kind'] == 'struct':
-                continue
+            # props = self._get_properties(child)
+            # if props['expose'] and props['kind'] == 'struct':
+                # continue
             code_text += generate.generate(child)
 
         source_text = text + self._recurse_namespace(self._namespaces, code_text)

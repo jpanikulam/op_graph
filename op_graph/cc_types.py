@@ -98,6 +98,7 @@ def zero(data):
         'MatNd': "{}::Zero()".format(full_name),
         'double': "0.0",
         'float': "0.0",
+        'int': "0",
     }
     return router.get(data['name'])
 

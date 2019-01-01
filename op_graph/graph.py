@@ -73,6 +73,7 @@ class OpGraph(object):
         self._uniques = set()
 
         self._group_types = {}
+        self._group_members = defaultdict(list)
 
         self._op_table = op_defs.op_table(self)
         self._d_table = op_defs.d_table(self)
@@ -111,10 +112,12 @@ class OpGraph(object):
     def copy_types(self, gr):
         # TODO: Make sure this doesn't overwrite anything
         self._group_types.update(gr._group_types)
+        self._group_members.update(gr._group_members)
 
     def _copy_functions(self, gr):
         self._subgraph_functions.update(gr._subgraph_functions)
         self._functions.update(gr._functions)
+        self._group_members.update(gr._group_members)
 
     def mimic_graph(self, gr):
         syms = set(self._adj.keys())
@@ -146,6 +149,10 @@ class OpGraph(object):
     @property
     def group_types(self):
         return self._group_types
+
+    @property
+    def group_members(self):
+        return self._group_members
 
     def register_group_type(self, name, field_names=[], field_properties=[]):
         self._needs_all_unique(field_names)
@@ -498,7 +505,7 @@ class OpGraph(object):
     def se3(self, name):
         return self.emplace(name, op_defs.create_SE3())
 
-    def add_graph_as_function(self, name, graph, output_sym, input_order=[]):
+    def add_graph_as_function(self, name, graph, output_sym, input_order=[], should_be_member=None):
         """Graph can't contain derivatives.
 
         How to handle groups?
@@ -530,14 +537,21 @@ class OpGraph(object):
 
         args = tuple(args)
 
-        self._subgraph_functions[name].append({
+        function = {
             'graph': simplified_graph,
             'returns': returns,
             'args': args,
             'input_names': tuple(input_map),
-            'output_name': output_sym
-        })
+            'output_name': output_sym,
+            'member': should_be_member,
+            'name': name
+        }
+        self._subgraph_functions[name].append(function)
         self.add_function(name, returns, args)
+
+        if should_be_member is not None:
+            self._group_members[should_be_member].append(function)
+
         return name
 
     def add_function(self, f_name, returns, arguments):
@@ -685,6 +699,8 @@ class OpGraph(object):
         """Creates a group."""
         self._needs_not(group_sym)
         self._needs_inherent_type(inherent_type)
+        self._needs_iter(syms)
+        self._needs_iter(names)
         self._needs_all_unique(syms)
         self._needs_all_unique(names)
 
