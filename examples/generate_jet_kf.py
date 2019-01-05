@@ -44,10 +44,13 @@ def gyro_observation_model(grx):
     eps_dot = groups.extract_by_name(gr, 'eps_dot', state, 'eps_dot')
     gyro_bias = groups.extract_by_name(gr, 'gyro_bias', state, 'gyro_bias')
     w = gr.block('w', eps_dot, 3, 0, 3, 1)
+
     R_sensor_from_vehicle = gr.rotation('R_sensor_from_vehicle', imu_from_vehicle)
+
     w_imu = gr.mul(gr.anon(), R_sensor_from_vehicle, w)
 
-    observed_w = gr.add('observed_w', w_imu, gyro_bias)
+    # observed_w = gr.add('observed_w', w_imu, gyro_bias)
+    observed_w = gr.sub('observed_w', gyro_bias, w_imu)
 
     generated_type = 'GyroMeasurement'
     generated_func = 'observe_gyro'
