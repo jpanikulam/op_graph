@@ -115,7 +115,7 @@ class Constant(object):
         new_value = value_remap.get(value, value)
 
         valid_special_values = {
-            'matrix': ('I', 'zero', 'zeros', 'ones'),
+            'matrix': ('I', 'zero', 'zeros', 'ones', 'unitx', 'unity', 'unitz'),
             'liegroup': ('I'),
             'scalar': ('I', 'zero'),
         }
@@ -133,6 +133,9 @@ class Constant(object):
                 assert dim[0] == dim[1], "Zero and identity must be square (Did you mean 'zeros'?)"
             elif new_value in ['zeros', 'ones']:
                 assert dim[1] == 1, "Zeros and Ones must be vectors"
+            elif new_value in ['unitx', 'unity', 'unitz']:
+                assert dim[1] == 1, "unit* must be a vector"
+                assert dim[0] == 3, "unitx, unity, unitz must be 3-vectorss"
 
         if isinstance(new_value, str):
             assert new_value in valid_special_values[value_type]

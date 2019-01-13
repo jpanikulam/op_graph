@@ -103,8 +103,8 @@ def zero(data):
     return router.get(data['name'])
 
 
-def needed_header(type_name):
-    mapping = {
+class HeaderMapping(object):
+    _header_mapping = {
         'SO3': header_dep('sophus.hh'),
         'SE3': header_dep('sophus.hh'),
         'SO2': header_dep('sophus.hh'),
@@ -114,8 +114,14 @@ def needed_header(type_name):
         'vector': sys_header_dep('vector'),
         'array': sys_header_dep('array'),
     }
-    depends = mapping.get(type_name, [])
-    return depends
+
+    @classmethod
+    def set_header_mapping(cls, new_mapping):
+        cls._header_mapping = new_mapping
+
+    @classmethod
+    def needed_header(cls, type_name):
+        return cls._header_mapping.get(type_name, [])
 
 
 def needed_header_fnc(fnc_name):

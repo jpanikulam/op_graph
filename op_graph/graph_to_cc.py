@@ -84,6 +84,10 @@ def generate_constant(sym, gr):
             'ones': 'Ones',
             'identity': 'Identity',
             'zero': 'Zero',
+
+            'unitx': 'UnitX',
+            'unity': 'UnitY',
+            'unitz': 'UnitZ',
         }
         return "{}::{}()".format(matrix_txt(props), member_map[sym.value])
     elif props['type'] == 'scalar':

@@ -15,7 +15,7 @@ def form_line(ltokens=[], rtokens=[]):
         return '{ltext};'.format(ltext=ltext)
 
 
-def clang_fmt(text, clang_format_path='/home/jacob/repos/llvm/clang-format'):
+def clang_fmt_once(text, clang_format_path='/home/jacob/repos/llvm/clang-format'):
     """Generate formatted code."""
     if not os.path.exists(clang_format_path):
         raise ValueError("No clang-format!")
@@ -26,3 +26,8 @@ def clang_fmt(text, clang_format_path='/home/jacob/repos/llvm/clang-format'):
     text = clang_format_stdout.decode()
     clean_text = text.replace("Can't find usable .clang-format, using LLVM style", "")
     return clean_text
+
+
+def clang_fmt(text, clang_format_path='/home/jacob/repos/llvm/clang-format'):
+    out = clang_fmt_once(text, clang_format_path)
+    return clang_fmt_once(out)

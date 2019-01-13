@@ -107,6 +107,8 @@ class OpGraph(object):
     def get_properties(self, sym):
         if isinstance(sym, op_defs.Constant):
             return sym.properties
+        if isinstance(sym, list):
+            return list(map(self.get_properties, sym))
         return self._properties[sym]
 
     def copy_types(self, gr):
@@ -738,9 +740,10 @@ class OpGraph(object):
         self._properties[group_sym] = group_properties
         return group_sym
 
-    def extend_group(self, new_group_sym, old_group_sym, new_syms=[]):
+    def extend_group(self, new_group_sym, old_group_sym, new_syms=[], inherent_type=None):
         self._needs_not(new_group_sym)
         new_properties = []
+
         old_properties = self.get_properties(old_group_sym)['elements']
         new_properties.extend(old_properties)
         new_properties.extend(map(self.get_properties, new_syms))
@@ -748,7 +751,7 @@ class OpGraph(object):
         self._properties[new_group_sym] = op_defs.create_group(new_properties)
         return new_group_sym
 
-    def combine_groups(self, new_group_sym, sym_groups=[]):
+    def combine_groups(self, new_group_sym, sym_groups=[], inherent_type=None):
         self._needs_not(new_group_sym)
         new_properties = []
         for group in sym_groups:

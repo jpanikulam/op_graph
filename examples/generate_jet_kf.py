@@ -78,7 +78,9 @@ def accel_observation_model(grx):
     parameters = gr.emplace('parameters', gr.group_types['Parameters'])
 
     imu_from_vehicle = groups.extract_by_name(gr, 'imu_from_vehicle', parameters, 'T_imu_from_vehicle')
-    g_world = groups.extract_by_name(gr, 'g_world', parameters, 'g_world')
+    # g_world = groups.extract_by_name(gr, 'g_world', parameters, 'g_world')
+
+    g_world = gr.mul('g_world', gr.constant_vector('unit_z', 3, 'unitz'), gr.constant_scalar('g_mpss', 9.81))
 
     vehicle_from_world = groups.extract_by_name(gr, 'vehicle_from_world', state, 'T_body_from_world')
     eps_dot = groups.extract_by_name(gr, 'eps_dot', state, 'eps_dot')
@@ -160,7 +162,7 @@ def make_jet():
     # gr.time_antiderivative('gyro_bias', 'dgyro_bias')
     # gr.time_antiderivative('eps_ddot', 'eps_dddot')
 
-    gr.vector('g_world', 3)
+    # gr.vector('g_world', 3)
     gr.se3('T_imu_from_vehicle')
     # gr.se3('T_camera_from_body')
 
@@ -185,7 +187,8 @@ def main():
     cg = CodeGraph(name='integrator', namespaces=['estimation', 'jet_filter'])
     graph_to_cc.express(cg, rk4)
 
-    root = '/home/jacob/repos/experiments/'
+    # root = '/home/jacob/repos/experiments/'
+    root = '/home/jacob/repos/hover-jet/third_party/experiments/'
     loc = 'estimation/jet'
     name = 'jet_rk4'
 
