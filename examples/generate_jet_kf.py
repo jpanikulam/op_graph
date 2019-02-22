@@ -3,6 +3,7 @@ from op_graph import graph_to_cc
 from op_graph import integration
 from op_graph.code import CodeGraph
 from op_graph import groups
+from op_graph import op_defs
 
 
 def fiducial_observation_model(grx):
@@ -74,52 +75,50 @@ def accel_observation_model(grx):
     gr = graph.OpGraph()
     gr.copy_types(grx)
 
-    state = gr.emplace('state', gr.group_types['State'])
-    parameters = gr.emplace('parameters', gr.group_types['Parameters'])
-
-    imu_from_vehicle = groups.extract_by_name(gr, 'imu_from_vehicle', parameters, 'T_imu_from_vehicle')
-    # g_world = groups.extract_by_name(gr, 'g_world', parameters, 'g_world')
-
-    g_world = gr.mul('g_world', gr.constant_vector('unit_z', 3, 'unitz'), gr.constant_scalar('g_mpss', 9.81))
-
-    vehicle_from_world = groups.extract_by_name(gr, 'vehicle_from_world', state, 'T_body_from_world')
-    eps_dot = groups.extract_by_name(gr, 'eps_dot', state, 'eps_dot')
-    eps_ddot = groups.extract_by_name(gr, 'eps_ddot', state, 'eps_ddot')
-    accel_bias = groups.extract_by_name(gr, 'accel_bias', state, 'accel_bias')
-
-    adj = gr.adjoint('adj', imu_from_vehicle)
-
-    vw_imu = gr.mul(gr.anon(), adj, eps_dot)
-    aq_imu = gr.mul(gr.anon(), adj, eps_ddot)
-
-    v_imu = gr.block('v_imu', vw_imu, 0, 0, 3, 1)
-    w_imu = gr.block('w_imu', vw_imu, 3, 0, 3, 1)
-    a_imu = gr.block('a_imu', aq_imu, 0, 0, 3, 1)
-
-    clean = gr.sub('clean', gr.cross_product(gr.anon(), w_imu, v_imu), a_imu)
-
-    T_sensor_from_world = gr.mul(gr.anon(), imu_from_vehicle, vehicle_from_world)
-    R_sensor_from_world = gr.rotation('R_sensor_from_world', T_sensor_from_world)
-    g_imu = gr.mul('g_imu', R_sensor_from_world, g_world)
-
-    observed_acceleration = gr.reduce_binary_op(
-        'add',
-        'observed_acceleration',
-        [
-            clean,
-            g_imu,
-            accel_bias,
-        ]
-    )
     generated_type = 'AccelMeasurement'
     generated_func = 'observe_accel'
 
     gr.register_group_type(
         generated_type,
-        [observed_acceleration],
-        [gr.get_properties(observed_acceleration)])
+        ['observed_acceleration'],
+        [op_defs.create_vector(3)]
+    )
 
-    accel_meas = gr.groupify('accel_meas', [observed_acceleration], inherent_type=generated_type)
+    state = gr.emplace('state', gr.group_types['State'])
+    parameters = gr.emplace('parameters', gr.group_types['Parameters'])
+
+    R_world_from_body = groups.extract_by_name(gr, 'R_world_from_body', state, 'R_world_from_body')
+    eps_ddot = groups.extract_by_name(gr, 'eps_ddot', state, 'eps_ddot')
+    eps_dot = groups.extract_by_name(gr, 'eps_dot', state, 'eps_dot')
+    accel_bias = groups.extract_by_name(gr, 'accel_bias', state, 'accel_bias')
+
+    imu_from_vehicle = groups.extract_by_name(gr, 'imu_from_vehicle', parameters, 'T_imu_from_vehicle')
+
+    R_imu_from_vehicle = gr.rotation('R_imu_from_vehicle', imu_from_vehicle)
+    w = gr.block('w', eps_dot, 3, 0, 3, 1)
+    a_world = gr.block('a_world', eps_ddot, 0, 0, 3, 1)
+
+    R_imu_from_world = gr.mul('R_imu_from_world', R_imu_from_vehicle, gr.inv('R_body_from_world', R_world_from_body))
+    a_imu = gr.mul('a_imu', R_imu_from_world, a_world)
+
+    g_world = gr.mul(
+        'g_world',
+        gr.constant_vector('unit_z', 3, 'unitz'),
+        gr.constant_scalar('g_mpss', 9.81)
+    )
+    g_imu = gr.mul('g_imu', R_imu_from_world, g_world)
+
+    observed_acceleration = gr.reduce_binary_op('add', 'observed_acceleration', [
+        a_imu,
+        accel_bias,
+        g_imu
+    ])
+
+    accel_meas = gr.groupify(
+        'accel_meas',
+        [observed_acceleration],
+        inherent_type=generated_type
+    )
 
     grx.add_graph_as_function(
         generated_func,
@@ -127,10 +126,20 @@ def accel_observation_model(grx):
         output_sym=accel_meas,
         input_order=[state, parameters]
     )
+
+    # grx.add_function(
+    #     'observe_accel',
+    #     returns=grx.group_types[generated_type],
+    #     arguments=(
+    #         grx.group_types['State'],
+    #         grx.group_types['Parameters']
+    #     )
+    # )
+
     groups.create_group_diff(grx, generated_type)
 
     add_error_model(grx, generated_type, generated_func)
-    return gr
+    # return grx
 
 
 def add_error_model(grx, group_type, model_name):
@@ -164,14 +173,22 @@ def make_jet():
 
     # gr.vector('g_world', 3)
     gr.se3('T_imu_from_vehicle')
-    # gr.se3('T_camera_from_body')
 
     gr.state(gr.vector('accel_bias', 3))
     gr.state(gr.vector('gyro_bias', 3))
     gr.state(gr.vector('eps_ddot', 6))
+
     gr.state(gr.time_antiderivative('eps_dot', 'eps_ddot'))
-    gr.state(gr.se3('T_body_from_world'))
-    gr.time_antiderivative('T_body_from_world', 'eps_dot')
+
+    w = gr.block('w', 'eps_dot', 3, 0, 3, 1)
+    v = gr.block('v', 'eps_dot', 0, 0, 3, 1)
+
+    # gr.state(gr.se3('T_body_from_world'))
+
+    # gr.time_antiderivative('T_body_from_world', 'eps_dot')
+    gr.state(gr.time_antiderivative('x_world', v))
+    gr.so3('R_world_from_body')
+    gr.state(gr.time_antiderivative('R_world_from_body', w))
     return gr
 
 

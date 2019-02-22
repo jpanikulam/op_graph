@@ -247,7 +247,15 @@ class OpGraph(object):
     def _needs_valid_matmul(self, a, b):
         dim_a = self.get_properties(a)['dim']
         dim_b = self.get_properties(b)['dim']
-        assert dim_a[1] == dim_b[0]
+        error_msg = "{}: ({}, {}) !* {}: ({}, {})".format(
+            a,
+            dim_a[0],
+            dim_a[1],
+            b,
+            dim_b[0],
+            dim_b[1],
+        )
+        assert dim_a[1] == dim_b[0], error_msg
 
     def _needs_vector(self, a):
         assert self.get_properties(a)['dim'][1] == 1
@@ -706,6 +714,10 @@ class OpGraph(object):
         return sym
 
     def vstack(self, vec_sym, syms=[]):
+        """TODO: Make this an operation that can create a matrix.
+
+        And create an exp/log for GL(N)
+        """
         self._needs_not(vec_sym)
         for sym in syms:
             self._needs_type(sym, 'scalar')

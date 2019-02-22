@@ -19,10 +19,10 @@ HeaderMapping.set_header_mapping({
 def make_vanes():
     gr = graph.OpGraph()
 
-    vane_0 = gr.scalar('servo_0_angle')
-    vane_1 = gr.scalar('servo_1_angle')
-    vane_2 = gr.scalar('servo_2_angle')
-    vane_3 = gr.scalar('servo_3_angle')
+    vane_0 = gr.scalar('servo_0_angle_rad')
+    vane_1 = gr.scalar('servo_1_angle_rad')
+    vane_2 = gr.scalar('servo_2_angle_rad')
+    vane_3 = gr.scalar('servo_3_angle_rad')
 
     vanes = [vane_0, vane_1, vane_2, vane_3]
     gr.register_group_type('QuadraframeStatus', vanes, gr.get_properties(vanes))
@@ -49,7 +49,7 @@ def vanes():
     graph_to_cc.express(cg, vane_gr)
     root = '/home/jacob/repos/hover-jet/'
     loc = 'control'
-    name = 'vanes'
+    name = 'vanes_generated'
     cg.write_to_files(root, loc, name)
 
 
