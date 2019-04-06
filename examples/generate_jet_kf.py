@@ -41,17 +41,19 @@ def gyro_observation_model(grx):
     parameters = gr.emplace('parameters', gr.group_types['Parameters'])
 
     imu_from_vehicle = groups.extract_by_name(gr, 'imu_from_vehicle', parameters, 'T_imu_from_vehicle')
+    R_world_from_body = groups.extract_by_name(gr, 'R_world_from_body', state, 'R_world_from_body')
 
     eps_dot = groups.extract_by_name(gr, 'eps_dot', state, 'eps_dot')
     gyro_bias = groups.extract_by_name(gr, 'gyro_bias', state, 'gyro_bias')
-    w = gr.block('w', eps_dot, 3, 0, 3, 1)
+    w_world = gr.block('w_world', eps_dot, 3, 0, 3, 1)
 
     R_sensor_from_vehicle = gr.rotation('R_sensor_from_vehicle', imu_from_vehicle)
 
-    w_imu = gr.mul(gr.anon(), R_sensor_from_vehicle, w)
+    R_sensor_from_world = gr.mul("R_sensor_from_world", R_sensor_from_vehicle, gr.inv(gr.anon(), R_world_from_body))
+    w_imu = gr.mul(gr.anon(), R_sensor_from_world, w_world)
 
-    # observed_w = gr.add('observed_w', w_imu, gyro_bias)
-    observed_w = gr.sub('observed_w', gyro_bias, w_imu)
+    observed_w = gr.add('observed_w', w_imu, gyro_bias)
+    # observed_w = gr.sub('observed_w', gyro_bias, w_imu)
 
     generated_type = 'GyroMeasurement'
     generated_func = 'observe_gyro'
